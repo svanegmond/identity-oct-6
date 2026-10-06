@@ -19,7 +19,7 @@
 | AC-5 | What-landed: commit order Phase A before B | _pending_ | Sequencing held |
 | AC-6 | TP-2, TP-3 / What-landed DAO packages | _pending_ | Dual-DB DAO landed |
 | AC-7 | TP-4 / Exhibit Auth+profile | _pending_ | JWT issue + verify |
-| AC-8 | TP-2 + Exhibit Auth+profile (search) | _pending_ | Profile search/retrieve |
+| AC-8 | TP-8 + Exhibit Auth+profile (search) | _pending_ | Profile search/retrieve |
 | AC-9 | TP-5 | _pending_ | Connector wire fidelity |
 | AC-10 | TP-6 / Exhibit Composed IdP path | _pending_ | Composed PII path (SK-2) |
 | AC-11 | What-landed: go.mod modules | _pending_ | Locked deps present |
@@ -31,9 +31,10 @@
 | TP-3 | Named PG testcontainers test | _pending_ | Postgres DAO |
 | TP-4 | Named JWT auth tests | _pending_ | Auth gate |
 | TP-5 | Named connector mapping tests | _pending_ | IdP shapes |
-| TP-6 | Named composed-path / boundary test | _pending_ | SK-2 composition |
+| TP-6 | Named composed-path behavioral test (+ optional boundary) | _pending_ | SK-2 composition |
 | TP-7 | `go test ./...` | _pending_ | Full suite |
-| VC-1 | Exhibit: Auth+profile round-trip | _pending_ | Live login→bearer→profile |
+| TP-8 | Named HTTP search/retrieve tests | _pending_ | Authenticated REST profile handlers |
+| VC-1 | Exhibit: Auth+profile round-trip | _pending_ | Live seed→login→bearer→profile |
 | VC-2 | Exhibit: Composed IdP path | _pending_ | Live connector composition |
 | VC-3 | Exhibit: Auth gate refusal | _pending_ | Live reject without/invalid token |
 
