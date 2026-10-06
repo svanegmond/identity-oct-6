@@ -8,7 +8,7 @@ ref: ENG-561
 
 **Worktree:** `_worktrees/ENG-561` (`feat/ENG-561`)  
 **Parade (captures):** [ENG-561-identity-go-service.md](ENG-561-identity-go-service.md)  
-**Replay:** from worktree root, `make demo` (needs `sqlite3` on PATH for U1)
+**Replay:** from worktree root, `make demo` (needs `sqlite3` on PATH for U1). Live HTTP notebook: [ENG-561-validating-walk.md](ENG-561-validating-walk.md).
 
 Lead 2026-10-06 withdrew REST enrich / composed IdP caller path (former AC-10, VC-2, TP-6, demo U6). Public REST is login, register, authenticated profile search/retrieve. IdP connector remains a library + httptest (`internal/idp`, AC-3 / AC-9 / TP-5). `cmd/fake-idp` may remain as a connector helper; `make demo` does not start it.
 
