@@ -15,11 +15,11 @@ Steward Validating artifact. Not the Implementor Parade. Traffic below was captu
 
 | Process | Bind |
 |---------|------|
-| Identity API (`cmd/server`, sqlite, `-seed`) | `localhost:8098` |
-| Fake vendor IdP (`cmd/fake-idp`) — **optional helper, not started by `make demo`** | `localhost:8099` |
+| Identity API ([`cmd/server`](../../cmd/server/main.go), sqlite, `-seed`) | `localhost:8098` |
+| Fake vendor IdP ([`cmd/fake-idp`](../../cmd/fake-idp/main.go)) — **optional helper, not started by [`make demo`](../../Makefile)** | `localhost:8099` |
 | SQLite file | `/tmp/eng561-scope.db` |
 
-Replay the packaged walk: `cd _worktrees/ENG-561 && make demo` (needs `sqlite3` on PATH). Replay this exact bind: `server -db sqlite -dsn /tmp/eng561-scope.db -port 8098 -seed`. Fake IdP is only for the vendor-wire exhibit in §3; Identity REST does not call it.
+Replay the packaged walk: `cd _worktrees/ENG-561 && make demo` ([`Makefile`](../../Makefile), [`scripts/demo.sh`](../../scripts/demo.sh); needs `sqlite3` on PATH). Replay this exact bind: [`server`](../../cmd/server/main.go) `-db sqlite -dsn /tmp/eng561-scope.db -port 8098 -seed`. Fake IdP is only for the vendor-wire exhibit in §3; Identity REST does not call it.
 
 ---
 
@@ -27,9 +27,9 @@ Replay the packaged walk: `cd _worktrees/ENG-561 && make demo` (needs `sqlite3` 
 
 **Original:** store and retrieve `user_profile` (name, address, phone) and `user_credential` (username, method, password) against PostgreSQL or SQLite behind one interface.
 
-**Landed:** port `store.DAO` in `internal/store/dao.go`. `store.Open(ctx, DBConfig{Driver, DSN})` selects **`sqlite`** or **`postgres`**. Callers never import a dialect. Goose + sqlc per backend. Operations: `CreateProfile`, `GetProfileByID`, `SearchProfiles`, `CreateCredential`, `GetCredentialByUsername`.
+**Landed:** port `store.DAO` in [`internal/store/dao.go`](../../internal/store/dao.go). `store.Open(ctx, DBConfig{Driver, DSN})` selects **`sqlite`** or **`postgres`**. Callers never import a dialect. Goose + sqlc per backend. Operations: `CreateProfile`, `GetProfileByID`, `SearchProfiles`, `CreateCredential`, `GetCredentialByUsername`.
 
-**Gap vs older wording:** Cockroach is not a third adapter. Brief locked PG + SQLite. PG is proven by `internal/store/postgres_test.go` (Testcontainers), not by this sqlite live bind.
+**Gap vs older wording:** Cockroach is not a third adapter. Brief locked PG + SQLite. PG is proven by [`internal/store/postgres_test.go`](../../internal/store/postgres_test.go) (Testcontainers), not by this sqlite live bind.
 
 **Live sqlite schema and rows** (after `-seed` on `/tmp/eng561-scope.db`):
 
@@ -71,7 +71,7 @@ Local profile `address` is one string. Vendor PII `address` (structured object) 
 
 **Original:** RESTful search/retrieve of profile data, plus API authentication.
 
-**Landed:** OpenAPI `project/openapi.yaml`. Login issues HS256 JWT (`POST /auth/login`). Protected routes use `Authorization: Bearer`. Validator: `nethttp-middleware` → `auth.Service.AuthenticateBearer` (`internal/api/handler.go`). Search: `GET /profiles?name=` / `phone=`. Retrieve: `GET /profiles/{id}`. `api.NewRouter(dao, authSvc)` — no IdP client.
+**Landed:** OpenAPI [`project/openapi.yaml`](../openapi.yaml). Login issues HS256 JWT (`POST /auth/login`). Protected routes use `Authorization: Bearer`. Validator: `nethttp-middleware` → `auth.Service.AuthenticateBearer` ([`internal/api/handler.go`](../../internal/api/handler.go)). Search: `GET /profiles?name=` / `phone=`. Retrieve: `GET /profiles/{id}`. `api.NewRouter(dao, authSvc)` — no IdP client.
 
 JWT signing default is interview-mock (`-jwt-secret`, default `dev-jwt-secret-interview-mock-long-enough`). Passwords compared as stored.
 
@@ -171,7 +171,7 @@ Observed: no enrich handler. Body wording is the OpenAPI catch-all, not a dedica
 - `POST /auth` body `{"username":"<string>","password":"<string>"}` → access token
 - `POST /identity` body `{"phone":"<string>","name":"<string>"}` → PII name, phone, address `{street_address, locality, region, postal_code, country}`
 
-**Landed:** `idp.Connector` in `internal/idp/connector.go`. ABC vs XYC differ by `ProviderConfig.BaseURL`. Proof of the Identity service is TP-5 httptest (`internal/idp/connector_test.go`). `cmd/fake-idp` still implements the two vendor routes as a helper. Identity `cmd/server` does **not** take an IdP URL and does **not** compose those hops onto `/profiles/*`.
+**Landed:** `idp.Connector` in [`internal/idp/connector.go`](../../internal/idp/connector.go). ABC vs XYC differ by `ProviderConfig.BaseURL`. Proof of the Identity service is TP-5 httptest ([`internal/idp/connector_test.go`](../../internal/idp/connector_test.go)). [`cmd/fake-idp`](../../cmd/fake-idp/main.go) still implements the two vendor routes as a helper. Identity [`cmd/server`](../../cmd/server/main.go) does **not** take an IdP URL and does **not** compose those hops onto `/profiles/*`.
 
 The captures below are against **fake-idp :8099**, labeled simulator. They are not Identity REST.
 
@@ -237,7 +237,7 @@ sequenceDiagram
 
 - Interview mock: stored passwords as-is; default JWT secret is a flag string.
 - Cockroach not implemented.
-- `make demo` U1 uses the `sqlite3` CLI.
-- Register exists on OpenAPI; this walk bootstraps via `-seed`.
+- [`make demo`](../../Makefile) U1 uses the `sqlite3` CLI.
+- Register exists on OpenAPI ([`project/openapi.yaml`](../openapi.yaml)); this walk bootstraps via `-seed`.
 - Fake vendor only; no LoginID cloud/SDK/passkeys.
-- Fake IdP is not part of `make demo`. Connector fidelity for the Identity module is httptest, not this simulator bind.
+- Fake IdP is not part of [`make demo`](../../Makefile). Connector fidelity for the Identity module is httptest ([`internal/idp/connector_test.go`](../../internal/idp/connector_test.go)), not this simulator bind.
