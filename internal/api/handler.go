@@ -2,13 +2,16 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/google/uuid"
+	middleware "github.com/oapi-codegen/nethttp-middleware"
 	"github.com/svanegmond/agentic-eng-oct-6/internal/auth"
 	"github.com/svanegmond/agentic-eng-oct-6/internal/idp"
 	"github.com/svanegmond/agentic-eng-oct-6/internal/store"
@@ -181,20 +184,61 @@ func (s *Server) EnrichProfile(ctx context.Context, request EnrichProfileRequest
 	}, nil
 }
 
-// NewRouter wires OpenAPI handlers and JWT bearer authentication middleware.
+// NewRouter wires OpenAPI handlers and JWT bearer authentication middleware via nethttp-middleware.
 func NewRouter(s store.DAO, a *auth.Service, i idp.Connector) http.Handler {
 	srv := NewServer(s, a, i)
 	strictHandler := NewStrictHandler(srv, nil)
 	apiHandler := Handler(strictHandler)
 
-	// Auth gate middleware: enforces JWT Bearer token on protected routes (/profiles)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		if strings.HasPrefix(path, "/profiles") {
-			a.Middleware(apiHandler).ServeHTTP(w, r)
-			return
-		}
-		// Public routes (/auth/login, /auth/register, health, etc.)
-		apiHandler.ServeHTTP(w, r)
-	})
+	swagger, err := GetSwagger()
+	if err != nil {
+		panic(fmt.Sprintf("failed to load swagger spec: %v", err))
+	}
+	swagger.Servers = nil
+
+	validatorOpts := &middleware.Options{
+		ErrorHandler: func(w http.ResponseWriter, message string, statusCode int) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(statusCode)
+			errKind := "bad_request"
+			if statusCode == http.StatusUnauthorized {
+				errKind = "unauthorized"
+			} else if statusCode == http.StatusNotFound {
+				errKind = "not_found"
+			}
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error":   errKind,
+				"message": message,
+			})
+		},
+		Options: openapi3filter.Options{
+			AuthenticationFunc: func(ctx context.Context, input *openapi3filter.AuthenticationInput) error {
+				if input.SecuritySchemeName != "BearerAuth" {
+					return nil
+				}
+
+				authHeader := input.RequestValidationInput.Request.Header.Get("Authorization")
+				if authHeader == "" {
+					return errors.New("missing Authorization header")
+				}
+
+				parts := strings.SplitN(authHeader, " ", 2)
+				if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+					return errors.New("invalid Authorization header format; Bearer required")
+				}
+
+				tokenStr := strings.TrimSpace(parts[1])
+				claims, err := a.VerifyToken(tokenStr)
+				if err != nil {
+					return fmt.Errorf("invalid or expired bearer token: %w", err)
+				}
+
+				req := input.RequestValidationInput.Request
+				*req = *req.WithContext(auth.ContextWithClaims(req.Context(), claims))
+				return nil
+			},
+		},
+	}
+
+	return middleware.OapiRequestValidatorWithOptions(swagger, validatorOpts)(apiHandler)
 }

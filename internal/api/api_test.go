@@ -320,3 +320,43 @@ func TestAPI_LoginAndRegister(t *testing.T) {
 		t.Errorf("POST /auth/login with bad password status = %d, want 401", recBadLogin.Code)
 	}
 }
+
+// TestAPI_OpenAPIBearerAuthEnforcement verifies OpenAPI BearerAuth security is enforced via nethttp-middleware.
+func TestAPI_OpenAPIBearerAuthEnforcement(t *testing.T) {
+	handler, _, _, _ := setupAPITest(t)
+
+	// 1. Basic auth instead of Bearer on protected route -> 401
+	reqBasic := httptest.NewRequest("GET", "/profiles", nil)
+	reqBasic.Header.Set("Authorization", "Basic dXNlcjpwYXNz")
+	recBasic := httptest.NewRecorder()
+	handler.ServeHTTP(recBasic, reqBasic)
+	if recBasic.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for Basic auth on protected route, got %d", recBasic.Code)
+	}
+
+	// 2. Corrupted Bearer token on protected route -> 401
+	reqCorrupt := httptest.NewRequest("GET", "/profiles", nil)
+	reqCorrupt.Header.Set("Authorization", "Bearer invalid.jwt.token")
+	recCorrupt := httptest.NewRecorder()
+	handler.ServeHTTP(recCorrupt, reqCorrupt)
+	if recCorrupt.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for corrupt token, got %d", recCorrupt.Code)
+	}
+
+	// 3. Unprotected route (/auth/login) does not enforce BearerAuth
+	loginPayload := map[string]string{
+		"username": "user",
+		"password": "wrong",
+	}
+	body, _ := json.Marshal(loginPayload)
+	reqPublic := httptest.NewRequest("POST", "/auth/login", bytes.NewReader(body))
+	reqPublic.Header.Set("Content-Type", "application/json")
+	recPublic := httptest.NewRecorder()
+	handler.ServeHTTP(recPublic, reqPublic)
+	// Response should reach handler (which returns 401 for bad password, not 401 for missing Bearer)
+	var errResp api.ErrorResponse
+	_ = json.NewDecoder(recPublic.Body).Decode(&errResp)
+	if errResp.Error != "unauthorized" || errResp.Message != "Invalid credentials" {
+		t.Errorf("expected handler-level 401 invalid credentials, got %+v", errResp)
+	}
+}

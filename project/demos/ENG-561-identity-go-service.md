@@ -20,7 +20,7 @@
 | AC-8 | TP-8 + Exhibit Auth+profile (search) | `internal/api/api_test.go:TestAPI_ProfileSearchAndRetrieve_TP8`, Exhibit: Auth+profile round-trip | Profile search/retrieve |
 | AC-9 | TP-5 | `internal/idp/connector_test.go:TestIdPConnector_WireMappingAndBothConfigs` | Connector wire fidelity |
 | AC-10 | TP-6 / Exhibit Composed IdP path | `internal/api/api_test.go:TestAPI_ComposedPath_TP6`, Exhibit: Composed IdP path | Composed PII path (SK-2) |
-| AC-11 | What-landed: go.mod modules | `go.mod` contains locked dependencies | Locked deps present |
+| AC-11 | What-landed: go.mod modules | `go.mod` (`oapi-codegen/v2`, `nethttp-middleware`, `runtime`, `tool` directive, locked modules), `internal/tools/tools.go` | Locked deps present and honest |
 | AC-12 | This Index complete for seams | Complete table covering AC-1–AC-15 and VC-1–VC-4 | Parade covers boundaries |
 | AC-13 | TP-7 battery / `go test ./...` | `go test ./...` exits 0 (all test packages pass) | Suite green |
 | AC-14 | Exhibits VC-1–VC-4 filled | Exhibits VC-1–VC-4 with live command transcripts below | Live VCs captured |
@@ -46,6 +46,8 @@
 - **REST + JWT / AC-2, AC-7, AC-8:** `project/openapi.yaml` and `project/decisions/rest-api-jwt-bearer.md` lock OpenAPI 3.0 and JWT bearer authentication. Implemented via `internal/api/handler.go` (`oapi-codegen` generated `internal/api/api.gen.go`) and `internal/auth/auth.go` (`golang-jwt/jwt/v5`). Login issues token on credential match; protected `/profiles` routes reject unauthenticated requests with HTTP 401.
 - **IdP connector / AC-3, AC-9:** `project/integrations.md` specifies external IdP wire contracts (`POST /auth` and `POST /identity` with address object). Implemented in `internal/idp/connector.go` with automatic authentication, in-memory token caching with skew safety, and pluggable provider configs for ABC and XYC.
 - **Composed path / AC-10:** Authenticated route `POST /profiles/enrich` calls the `idp.Connector` (`/auth` then `/identity`) and returns full PII (name, phone, address object) to the caller without merging IdP types into the DAO interface. Package boundary enforcement verified in `internal/boundary_test.go`.
+- **Locked dependencies & middleware / AC-11:** All locked modules from Dependency / Technology Decisions are honest in `go.mod`: `github.com/golang-jwt/jwt/v5`, `github.com/jackc/pgx/v5`, `modernc.org/sqlite`, `github.com/pressly/goose/v3`, `github.com/oapi-codegen/oapi-codegen/v2` (locked via direct require, `tool` directive in `go.mod`, and `internal/tools/tools.go`), `github.com/oapi-codegen/runtime`, `github.com/oapi-codegen/nethttp-middleware` (direct require, wired in `internal/api/handler.go`), `github.com/getkin/kin-openapi`, `github.com/google/uuid`, and `github.com/testcontainers/testcontainers-go/modules/postgres`. OpenAPI `BearerAuth` security is enforced via `nethttp-middleware` rather than URL prefix matching.
+- **Package boundary enforcement / AC-4, TP-6:** `internal/boundary_test.go` (`TestArchitecturalPackageBoundaries`) resolves paths relative to the test file using `runtime.Caller`, validates non-empty `.go` file sets in `internal/store` and `internal/idp`, propagates walk errors, and permanently fails on illegal cross-package imports (proven via local probe test).
 - **`make demo` / AC-15:** Target `demo` in `Makefile` and script `scripts/demo.sh` stands up the Identity service (default SQLite, docker-free) and a vendor simulator (`cmd/fake-idp`), then sequentially walks U1 through U6 with inspectable request/response payloads.
 
 ```mermaid
@@ -158,11 +160,11 @@ Response:
 =================================================================
 GET http://localhost:8088/profiles/11111111-1111-1111-1111-111111111111 (no Authorization header)
 HTTP Status: 401
-Response: {"error":"unauthorized","message":"Missing Authorization header"}
+Response: {"error":"unauthorized","message":"security requirements failed: missing Authorization header"}
 
 GET http://localhost:8088/profiles/11111111-1111-1111-1111-111111111111 (invalid Bearer token)
 HTTP Status: 401
-Response: {"error":"unauthorized","message":"Invalid or expired bearer token"}
+Response: {"error":"unauthorized","message":"security requirements failed: invalid or expired bearer token: invalid token: token is malformed: token contains an invalid number of segments"}
 ```
 
 ### Exhibit: Spec use-case demo walk
@@ -193,7 +195,7 @@ Verified: SQLite database initialized, goose migrations applied, and user creden
 POST http://localhost:8088/auth/login
 Payload: {"username": "alice", "password": "password123"}
 Response:
-{"expires_in":86400,"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMTExMTExMTEtMTExMS0xMTExLTExMTEtMTExMTExMTExMTExIiwidXNlcm5hbWUiOiJhbGljZSIsImlzcyI6ImlkZW50aXR5LWdvLXNlcnZpY2UiLCJzdWIiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJleHAiOjE3OTEzNDcyMTEsImlhdCI6MTc5MTI2MDgxMX0.ty-dYBXYktW-Nf9RWg3I26zEo6wnP_C2o3G6K7iBngk","token_type":"Bearer"}
+{"expires_in":86400,"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMTExMTExMTEtMTExMS0xMTExLTExMTEtMTExMTExMTExMTExIiwidXNlcm5hbWUiOiJhbGljZSIsImlzcyI6ImlkZW50aXR5LWdvLXNlcnZpY2UiLCJzdWIiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJleHAiOjE3OTEzNDgzMzMsImlhdCI6MTc5MTI2MTkzM30.UL3MlUCCyT-3yaHVgU9aGd9jJUpqLQPlw9LHW2gLdkU","token_type":"Bearer"}
 Extracted Bearer Token: eyJhbGciOiJIUzI1NiIsInR5cCI6Ik...
 
 =================================================================
@@ -202,7 +204,7 @@ Extracted Bearer Token: eyJhbGciOiJIUzI1NiIsInR5cCI6Ik...
 GET http://localhost:8088/profiles/11111111-1111-1111-1111-111111111111
 Header: Authorization: Bearer <token>
 Response:
-{"address":"123 Market St, San Francisco, CA 94105","created_at":"2026-10-06T04:26:51.858178Z","id":"11111111-1111-1111-1111-111111111111","name":"Alice Smith","phone":"+15551234567","updated_at":"2026-10-06T04:26:51.858178Z"}
+{"address":"123 Market St, San Francisco, CA 94105","created_at":"2026-10-06T04:45:33.53559Z","id":"11111111-1111-1111-1111-111111111111","name":"Alice Smith","phone":"+15551234567","updated_at":"2026-10-06T04:45:33.53559Z"}
 
 =================================================================
 [U4] Authenticated profile search: Bearer + search profiles
@@ -210,18 +212,18 @@ Response:
 GET http://localhost:8088/profiles?name=Smith
 Header: Authorization: Bearer <token>
 Response:
-[{"address":"123 Market St, San Francisco, CA 94105","created_at":"2026-10-06T04:26:51.858178Z","id":"11111111-1111-1111-1111-111111111111","name":"Alice Smith","phone":"+15551234567","updated_at":"2026-10-06T04:26:51.858178Z"},{"address":"456 Castro St, Mountain View, CA 94041","created_at":"2026-10-06T04:26:51.858178Z","id":"22222222-2222-2222-2222-222222222222","name":"Bob Smith","phone":"+15559876543","updated_at":"2026-10-06T04:26:51.858178Z"}]
+[{"address":"123 Market St, San Francisco, CA 94105","created_at":"2026-10-06T04:45:33.53559Z","id":"11111111-1111-1111-1111-111111111111","name":"Alice Smith","phone":"+15551234567","updated_at":"2026-10-06T04:45:33.53559Z"},{"address":"456 Castro St, Mountain View, CA 94041","created_at":"2026-10-06T04:45:33.53559Z","id":"22222222-2222-2222-2222-222222222222","name":"Bob Smith","phone":"+15559876543","updated_at":"2026-10-06T04:45:33.53559Z"}]
 
 =================================================================
 [U5] Auth gate refusal: missing/invalid bearer rejected (401)
 =================================================================
 GET http://localhost:8088/profiles/11111111-1111-1111-1111-111111111111 (no Authorization header)
 HTTP Status: 401
-Response: {"error":"unauthorized","message":"Missing Authorization header"}
+Response: {"error":"unauthorized","message":"security requirements failed: missing Authorization header"}
 
 GET http://localhost:8088/profiles/11111111-1111-1111-1111-111111111111 (invalid Bearer token)
 HTTP Status: 401
-Response: {"error":"unauthorized","message":"Invalid or expired bearer token"}
+Response: {"error":"unauthorized","message":"security requirements failed: invalid or expired bearer token: invalid token: token is malformed: token contains an invalid number of segments"}
 
 =================================================================
 [U6] IdP connector composed path: invoke connector -> return PII
