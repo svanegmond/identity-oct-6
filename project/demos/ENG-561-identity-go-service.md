@@ -18,37 +18,35 @@
 | AC-6 | TP-2, TP-3 / What-landed DAO packages | `internal/store/sqlite_test.go:TestSQLiteDAO_StoreRetrieveSearch`, `internal/store/postgres_test.go:TestPostgresDAO_StoreRetrieveSearch` | Dual-DB DAO landed |
 | AC-7 | TP-4 / Exhibit Auth+profile | `internal/auth/jwt_test.go:TestAuthService_TokenIssueAndVerify`, `TestAuthService_CredentialCheckAndLogin`, `TestAuthService_AuthenticateBearer`, `internal/api/api_test.go:TestAPI_OpenAPIBearerAuthEnforcement`, Exhibit: Auth+profile round-trip | JWT issue + verify |
 | AC-8 | TP-8 + Exhibit Auth+profile (search) | `internal/api/api_test.go:TestAPI_ProfileSearchAndRetrieve_TP8`, Exhibit: Auth+profile round-trip | Profile search/retrieve |
-| AC-9 | TP-5 | `internal/idp/connector_test.go:TestIdPConnector_WireMappingAndBothConfigs` | Connector wire fidelity |
-| AC-10 | TP-6 / Exhibit Composed IdP path | `internal/api/api_test.go:TestAPI_ComposedPath_TP6`, Exhibit: Composed IdP path | Composed PII path (SK-2) |
+| AC-9 | TP-5 | `internal/idp/connector_test.go:TestIdPConnector_WireMappingAndBothConfigs` | Connector wire fidelity (httptest; no public enrich) |
 | AC-11 | What-landed: go.mod modules | `go.mod` (`oapi-codegen/v2`, `nethttp-middleware`, `runtime`, `tool` directive, locked modules), `internal/tools/tools.go` | Locked deps present and honest |
-| AC-12 | This Index complete for seams | Complete table covering AC-1–AC-15 and VC-1–VC-4 | Parade covers boundaries |
+| AC-12 | This Index complete for seams | Complete table covering AC-1–AC-9, AC-11–AC-15, VC-1, VC-3, VC-4 | Parade covers remaining boundaries |
 | AC-13 | TP-7 battery / `go test ./...` | `go test ./...` exits 0 (all test packages pass) | Suite green |
-| AC-14 | Exhibits VC-1–VC-4 filled | Exhibits VC-1–VC-4 with live command transcripts below | Live VCs captured |
-| AC-15 | What-landed: `make demo` + Exhibit Spec use-case demo walk | `Makefile` (`demo` target), `scripts/demo.sh`, Exhibit: Spec use-case demo walk | Original-spec use cases U1–U6 |
+| AC-14 | Exhibits VC-1, VC-3, VC-4 filled | Exhibits below with live command transcripts | Live VCs captured |
+| AC-15 | What-landed: `make demo` + Exhibit Spec use-case demo walk | `Makefile` (`demo` target), `scripts/demo.sh`, Exhibit: Spec use-case demo walk | Use cases U1–U5 |
 | TP-1 | Commit order / artifact paths | Commit `2c29cae` (Phase A contracts) before `8c9dd67` (Phase B implementation) | Phase A before B |
 | TP-2 | Named DAO SQLite test | `internal/store/sqlite_test.go:TestSQLiteDAO_StoreRetrieveSearch` | SQLite DAO |
 | TP-3 | Named PG testcontainers test | `internal/store/postgres_test.go:TestPostgresDAO_StoreRetrieveSearch` | Postgres DAO |
 | TP-4 | Named JWT auth tests | `internal/auth/jwt_test.go:TestAuthService_TokenIssueAndVerify`, `TestAuthService_CredentialCheckAndLogin`, `TestAuthService_AuthenticateBearer`, `internal/api/api_test.go:TestAPI_OpenAPIBearerAuthEnforcement` | Auth gate |
 | TP-5 | Named connector mapping tests | `internal/idp/connector_test.go:TestIdPConnector_WireMappingAndBothConfigs` | IdP shapes |
-| TP-6 | Named composed-path behavioral test (+ optional boundary) | `internal/api/api_test.go:TestAPI_ComposedPath_TP6`, `internal/boundary_test.go:TestArchitecturalPackageBoundaries` | SK-2 composition |
-| TP-7 | `go test ./...` | `go test -v ./...` exits 0 | Full suite |
+| TP-7 | `go test ./...` | `go test ./...` exits 0 | Full suite |
 | TP-8 | Named HTTP search/retrieve tests | `internal/api/api_test.go:TestAPI_ProfileSearchAndRetrieve_TP8` | Authenticated REST profile handlers |
 | VC-1 | Exhibit: Auth+profile round-trip | `make demo` U1–U4 output in Exhibit: Auth+profile round-trip | Live seed→login→bearer→profile |
-| VC-2 | Exhibit: Composed IdP path | `make demo` U6 output in Exhibit: Composed IdP path | Live connector composition |
 | VC-3 | Exhibit: Auth gate refusal | `make demo` U5 output in Exhibit: Auth gate refusal | Live reject without/invalid token |
-| VC-4 | Exhibit: Spec use-case demo walk (`make demo`) | Full transcript in Exhibit: Spec use-case demo walk | U1–U6 in one Lead-facing command |
+| VC-4 | Exhibit: Spec use-case demo walk (`make demo`) | Full transcript in Exhibit: Spec use-case demo walk | U1–U5 in one Lead-facing command |
+
+Withdrawn (Lead 2026-10-06; not in this Parade): AC-10, VC-2, TP-6, demo U6.
 
 ---
 
 ## What landed
 
 - **DAO contract / AC-1, AC-6:** `project/schemas.md` defines the Go-facing `store.DAO` interface and schemas. Implemented in `internal/store/dao.go`, `internal/store/sqlite.go`, and `internal/store/postgres.go` using `goose` embedded migrations and `sqlc` dual packages (`sqlc_sqlite` and `sqlc_postgres`). Callers select driver via `store.DBConfig` and never import DB drivers.
-- **REST + JWT / AC-2, AC-7, AC-8:** `project/openapi.yaml` and `project/decisions/rest-api-jwt-bearer.md` lock OpenAPI 3.0 and JWT bearer authentication. Implemented via `internal/api/handler.go` (`oapi-codegen` generated `internal/api/api.gen.go`), `internal/auth/auth.go` (`golang-jwt/jwt/v5`), and `nethttp-middleware` delegating to a shared `auth.Service.AuthenticateBearer` path. Login issues token on credential match; protected `/profiles` routes reject unauthenticated requests with HTTP 401 and a stable unauthorized message without echoing jwt parse details.
-- **IdP connector / AC-3, AC-9:** `project/integrations.md` specifies external IdP wire contracts (`POST /auth` and `POST /identity` with address object). Implemented in `internal/idp/connector.go` with automatic authentication, in-memory token caching with skew safety, and pluggable provider configs for ABC and XYC.
-- **Composed path / AC-10:** Authenticated route `POST /profiles/enrich` calls the `idp.Connector` (`/auth` then `/identity`) and returns full PII (name, phone, address object) to the caller without merging IdP types into the DAO interface. Package boundary enforcement verified in `internal/boundary_test.go`.
+- **REST + JWT / AC-2, AC-7, AC-8:** `project/openapi.yaml` and `project/decisions/rest-api-jwt-bearer.md` lock OpenAPI 3.0 and JWT bearer authentication. Implemented via `internal/api/handler.go` (`oapi-codegen` generated `internal/api/api.gen.go`), `internal/auth/auth.go` (`golang-jwt/jwt/v5`), and `nethttp-middleware` delegating to a shared `auth.Service.AuthenticateBearer` path. Login issues token on credential match; protected `/profiles` routes reject unauthenticated requests with HTTP 401 and a stable unauthorized message without echoing jwt parse details. Public REST has no enrich route.
+- **IdP connector / AC-3, AC-9:** `project/integrations.md` specifies external IdP wire contracts (`POST /auth` and `POST /identity` with address object). Implemented in `internal/idp/connector.go` with automatic authentication, in-memory token caching with skew safety, and pluggable provider configs for ABC and XYC. Proof is TP-5 httptest. `cmd/fake-idp` remains as a connector test helper; `make demo` does not start it.
 - **Locked dependencies & middleware / AC-11:** All locked modules from Dependency / Technology Decisions are honest in `go.mod`: `github.com/golang-jwt/jwt/v5`, `github.com/jackc/pgx/v5`, `modernc.org/sqlite`, `github.com/pressly/goose/v3`, `github.com/oapi-codegen/oapi-codegen/v2` (locked via direct require, `tool` directive in `go.mod`, and `internal/tools/tools.go`), `github.com/oapi-codegen/runtime`, `github.com/oapi-codegen/nethttp-middleware` (direct require, wired in `internal/api/handler.go`), `github.com/getkin/kin-openapi`, `github.com/google/uuid`, and `github.com/testcontainers/testcontainers-go/modules/postgres`. OpenAPI `BearerAuth` security is enforced via `nethttp-middleware` rather than URL prefix matching.
-- **Package boundary enforcement / AC-4, TP-6:** `internal/boundary_test.go` (`TestArchitecturalPackageBoundaries`) resolves paths relative to the test file using `runtime.Caller`, validates non-empty `.go` file sets in `internal/store` and `internal/idp`, propagates walk errors, and permanently fails on illegal cross-package imports (proven via local probe test).
-- **`make demo` / AC-15:** Target `demo` in `Makefile` and script `scripts/demo.sh` stands up the Identity service (default SQLite, docker-free) and a vendor simulator (`cmd/fake-idp`), then sequentially walks U1 through U6 with inspectable request/response payloads.
+- **Package boundary enforcement / AC-4:** `internal/boundary_test.go` (`TestArchitecturalPackageBoundaries`) resolves paths relative to the test file using `runtime.Caller`, validates non-empty `.go` file sets in `internal/store` and `internal/idp`, propagates walk errors, and permanently fails on illegal cross-package imports.
+- **`make demo` / AC-15:** Target `demo` in `Makefile` and script `scripts/demo.sh` stands up the Identity service (default SQLite, docker-free) and walks U1 through U5 with inspectable request/response payloads. Fake IdP is not required for this walk.
 
 ```mermaid
 sequenceDiagram
@@ -56,8 +54,6 @@ sequenceDiagram
   participant REST as REST Handler
   participant Auth as Auth Middleware
   participant DAO as store.DAO (SQLite/Postgres)
-  participant IdP as IdP Connector (internal/idp)
-  participant FakeIdP as Vendor IdP (/auth, /identity)
 
   Note over Caller,REST: U2: Login & JWT Issue
   Caller->>REST: POST /auth/login (username, password)
@@ -75,17 +71,6 @@ sequenceDiagram
   Note over Caller,Auth: U5: Auth Gate Refusal
   Caller->>Auth: GET /profiles/{id} (no token / invalid token)
   Auth-->>Caller: 401 Unauthorized
-
-  Note over Caller,FakeIdP: U6: Composed IdP PII Path
-  Caller->>Auth: POST /profiles/enrich with Bearer <token>
-  Auth->>Auth: Verify JWT
-  Auth->>IdP: FetchIdentity(name, phone)
-  IdP->>FakeIdP: POST /auth (vendor credentials)
-  FakeIdP-->>IdP: vendor access token
-  IdP->>FakeIdP: POST /identity (Bearer vendor token)
-  FakeIdP-->>IdP: PII payload (incl. address object)
-  IdP-->>REST: IdentityPII
-  REST-->>Caller: 200 OK IdentityPII JSON
 ```
 
 ---
@@ -115,7 +100,7 @@ Verified: Real SQLite readback confirmed seeded profile and credential persisten
 POST http://localhost:8088/auth/login
 Payload: {"username": "alice", "password": "password123"}
 Response:
-{"expires_in":86400,"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMTExMTExMTEtMTExMS0xMTExLTExMTEtMTExMTExMTExMTExIiwidXNlcm5hbWUiOiJhbGljZSIsImlzcyI6ImlkZW50aXR5LWdvLXNlcnZpY2UiLCJzdWIiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJleHAiOjE3OTEzNTg0OTAsImlhdCI6MTc5MTI3MjA5MH0.L9PEjf263Ek9p9xfC93FgzzXG5iT8f0pbM5VppnMdfw","token_type":"Bearer"}
+{"expires_in":86400,"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMTExMTExMTEtMTExMS0xMTExLTExMTEtMTExMTExMTExMTExIiwidXNlcm5hbWUiOiJhbGljZSIsImlzcyI6ImlkZW50aXR5LWdvLXNlcnZpY2UiLCJzdWIiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJleHAiOjE3OTEzNjA1OTksImlhdCI6MTc5MTI3NDE5OX0.82Zk2tmHCkyD-H7jWbWGi1fsTggSsrC67T7Ej7OM46I","token_type":"Bearer"}
 Extracted Bearer Token: eyJhbGciOiJIUzI1NiIsInR5cCI6Ik...
 
 =================================================================
@@ -124,7 +109,7 @@ Extracted Bearer Token: eyJhbGciOiJIUzI1NiIsInR5cCI6Ik...
 GET http://localhost:8088/profiles/11111111-1111-1111-1111-111111111111
 Header: Authorization: Bearer <token>
 Response:
-{"address":"123 Market St, San Francisco, CA 94105","created_at":"2026-10-06T07:34:50.649266Z","id":"11111111-1111-1111-1111-111111111111","name":"Alice Smith","phone":"+15551234567","updated_at":"2026-10-06T07:34:50.649266Z"}
+{"address":"123 Market St, San Francisco, CA 94105","created_at":"2026-10-06T08:09:59.834549Z","id":"11111111-1111-1111-1111-111111111111","name":"Alice Smith","phone":"+15551234567","updated_at":"2026-10-06T08:09:59.834549Z"}
 
 =================================================================
 [U4] Authenticated profile search: Bearer + search profiles
@@ -132,24 +117,7 @@ Response:
 GET http://localhost:8088/profiles?name=Smith
 Header: Authorization: Bearer <token>
 Response:
-[{"address":"123 Market St, San Francisco, CA 94105","created_at":"2026-10-06T07:34:50.649266Z","id":"11111111-1111-1111-1111-111111111111","name":"Alice Smith","phone":"+15551234567","updated_at":"2026-10-06T07:34:50.649266Z"},{"address":"456 Castro St, Mountain View, CA 94041","created_at":"2026-10-06T07:34:50.649266Z","id":"22222222-2222-2222-2222-222222222222","name":"Bob Smith","phone":"+15559876543","updated_at":"2026-10-06T07:34:50.649266Z"}]
-```
-
-### Exhibit: Composed IdP path
-
-**What the Lead should see/feel:** The composed callable path (authenticated REST enrich route `POST /profiles/enrich`) talks to a fake IdP implementing `/auth` and `/identity` and returns PII to the caller.
-**Maps to:** AC-10, VC-2
-**Captured:** Live output from `make demo` (U6)
-
-```text
-=================================================================
-[U6] IdP connector composed path: invoke connector -> return PII
-=================================================================
-POST http://localhost:8088/profiles/enrich
-Header: Authorization: Bearer <token>
-Payload: {"name": "Robert Taylor", "phone": "+15552345678"}
-Response:
-{"address":{"country":"USA","locality":"San Francisco","postal_code":"94103","region":"CA","street_address":"789 Market Street, Suite 400"},"name":"Robert Taylor","phone":"+15552345678"}
+[{"address":"123 Market St, San Francisco, CA 94105","created_at":"2026-10-06T08:09:59.834549Z","id":"11111111-1111-1111-1111-111111111111","name":"Alice Smith","phone":"+15551234567","updated_at":"2026-10-06T08:09:59.834549Z"},{"address":"456 Castro St, Mountain View, CA 94041","created_at":"2026-10-06T08:09:59.834549Z","id":"22222222-2222-2222-2222-222222222222","name":"Bob Smith","phone":"+15559876543","updated_at":"2026-10-06T08:09:59.834549Z"}]
 ```
 
 ### Exhibit: Auth gate refusal
@@ -173,7 +141,7 @@ Response: {"error":"unauthorized","message":"Unauthorized: missing or invalid be
 
 ### Exhibit: Spec use-case demo walk
 
-**What the Lead should see/feel:** From the worktree, `make demo` stands the service (SQLite default) + fake IdP and walks U1–U6: persist, login→JWT, retrieve, search, auth-gate refusal, composed IdP PII return — with inspectable output, not canned stubs.
+**What the Lead should see/feel:** From the worktree, `make demo` stands the service (SQLite default) and walks U1–U5: persist, login→JWT, retrieve, search, auth-gate refusal — with inspectable output, not canned stubs. Fake IdP is not required.
 **Maps to:** AC-15, VC-4
 **Captured:** Full terminal session transcript of `make demo`
 
@@ -181,10 +149,9 @@ Response: {"error":"unauthorized","message":"Unauthorized: missing or invalid be
 $ make demo
 mkdir -p bin
 go build -o bin/server ./cmd/server
-go build -o bin/fake-idp ./cmd/fake-idp
 ./scripts/demo.sh
 =================================================================
- ENG-561 Identity Go Service: Use Case Demo Walk (U1 - U6)
+ ENG-561 Identity Go Service: Use Case Demo Walk (U1 - U5)
 =================================================================
 
 =================================================================
@@ -203,7 +170,7 @@ Verified: Real SQLite readback confirmed seeded profile and credential persisten
 POST http://localhost:8088/auth/login
 Payload: {"username": "alice", "password": "password123"}
 Response:
-{"expires_in":86400,"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMTExMTExMTEtMTExMS0xMTExLTExMTEtMTExMTExMTExMTExIiwidXNlcm5hbWUiOiJhbGljZSIsImlzcyI6ImlkZW50aXR5LWdvLXNlcnZpY2UiLCJzdWIiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJleHAiOjE3OTEzNTg0OTAsImlhdCI6MTc5MTI3MjA5MH0.L9PEjf263Ek9p9xfC93FgzzXG5iT8f0pbM5VppnMdfw","token_type":"Bearer"}
+{"expires_in":86400,"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMTExMTExMTEtMTExMS0xMTExLTExMTEtMTExMTExMTExMTExIiwidXNlcm5hbWUiOiJhbGljZSIsImlzcyI6ImlkZW50aXR5LWdvLXNlcnZpY2UiLCJzdWIiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJleHAiOjE3OTEzNjA1OTksImlhdCI6MTc5MTI3NDE5OX0.82Zk2tmHCkyD-H7jWbWGi1fsTggSsrC67T7Ej7OM46I","token_type":"Bearer"}
 Extracted Bearer Token: eyJhbGciOiJIUzI1NiIsInR5cCI6Ik...
 
 =================================================================
@@ -212,7 +179,7 @@ Extracted Bearer Token: eyJhbGciOiJIUzI1NiIsInR5cCI6Ik...
 GET http://localhost:8088/profiles/11111111-1111-1111-1111-111111111111
 Header: Authorization: Bearer <token>
 Response:
-{"address":"123 Market St, San Francisco, CA 94105","created_at":"2026-10-06T07:34:50.649266Z","id":"11111111-1111-1111-1111-111111111111","name":"Alice Smith","phone":"+15551234567","updated_at":"2026-10-06T07:34:50.649266Z"}
+{"address":"123 Market St, San Francisco, CA 94105","created_at":"2026-10-06T08:09:59.834549Z","id":"11111111-1111-1111-1111-111111111111","name":"Alice Smith","phone":"+15551234567","updated_at":"2026-10-06T08:09:59.834549Z"}
 
 =================================================================
 [U4] Authenticated profile search: Bearer + search profiles
@@ -220,7 +187,7 @@ Response:
 GET http://localhost:8088/profiles?name=Smith
 Header: Authorization: Bearer <token>
 Response:
-[{"address":"123 Market St, San Francisco, CA 94105","created_at":"2026-10-06T07:34:50.649266Z","id":"11111111-1111-1111-1111-111111111111","name":"Alice Smith","phone":"+15551234567","updated_at":"2026-10-06T07:34:50.649266Z"},{"address":"456 Castro St, Mountain View, CA 94041","created_at":"2026-10-06T07:34:50.649266Z","id":"22222222-2222-2222-2222-222222222222","name":"Bob Smith","phone":"+15559876543","updated_at":"2026-10-06T07:34:50.649266Z"}]
+[{"address":"123 Market St, San Francisco, CA 94105","created_at":"2026-10-06T08:09:59.834549Z","id":"11111111-1111-1111-1111-111111111111","name":"Alice Smith","phone":"+15551234567","updated_at":"2026-10-06T08:09:59.834549Z"},{"address":"456 Castro St, Mountain View, CA 94041","created_at":"2026-10-06T08:09:59.834549Z","id":"22222222-2222-2222-2222-222222222222","name":"Bob Smith","phone":"+15559876543","updated_at":"2026-10-06T08:09:59.834549Z"}]
 
 =================================================================
 [U5] Auth gate refusal: missing/invalid bearer rejected (401)
@@ -234,16 +201,7 @@ HTTP Status: 401
 Response: {"error":"unauthorized","message":"Unauthorized: missing or invalid bearer token"}
 
 =================================================================
-[U6] IdP connector composed path: invoke connector -> return PII
-=================================================================
-POST http://localhost:8088/profiles/enrich
-Header: Authorization: Bearer <token>
-Payload: {"name": "Robert Taylor", "phone": "+15552345678"}
-Response:
-{"address":{"country":"USA","locality":"San Francisco","postal_code":"94103","region":"CA","street_address":"789 Market Street, Suite 400"},"name":"Robert Taylor","phone":"+15552345678"}
-
-=================================================================
- All use cases U1 through U6 successfully demonstrated!
+ All use cases U1 through U5 successfully demonstrated!
 =================================================================
 
 --- Cleaning up background demo processes ---
@@ -261,21 +219,19 @@ Demo completed and cleaned up.
   - `internal/auth/jwt_test.go:TestAuthService_TokenIssueAndVerify`, `TestAuthService_CredentialCheckAndLogin`, `TestAuthService_AuthenticateBearer` (TP-4)
   - `internal/api/api_test.go:TestAPI_OpenAPIBearerAuthEnforcement` (TP-4 live router gate)
   - `internal/idp/connector_test.go:TestIdPConnector_WireMappingAndBothConfigs` (TP-5)
-  - `internal/api/api_test.go:TestAPI_ComposedPath_TP6` (TP-6)
-  - `internal/boundary_test.go:TestArchitecturalPackageBoundaries` (AC-4 / TP-6 supplemental)
+  - `internal/boundary_test.go:TestArchitecturalPackageBoundaries` (AC-4)
   - `internal/api/api_test.go:TestAPI_ProfileSearchAndRetrieve_TP8` (TP-8)
 - **VC drivers:**
   - `VC-1`: `make demo` (drives U1–U4: seed -> login -> bearer -> profile retrieve/search)
-  - `VC-2`: `make demo` (drives U6: composed IdP path returning PII)
   - `VC-3`: `make demo` (drives U5: auth gate refusal with 401)
-  - `VC-4`: `make demo` (full walk U1–U6)
+  - `VC-4`: `make demo` (full walk U1–U5)
 - **Commands:**
   - `go test ./...` — executes the full unit and integration test suite
-  - `make demo` — runs live service and vendor simulator, exercising U1 through U6
+  - `make demo` — runs live service, exercising U1 through U5
 
 ---
 
 ## Known Gaps
 
 - Interview mock: credential-at-rest and JWT signing defaults use mock/dev secrets by design per `project/decisions/interview-mock-security-latitude.md`; Parade does not prove production hardening.
-- Real LoginID cloud / SDK / passkeys are out of scope per brief; exhibits use local JWT + fake IdP only.
+- Real LoginID cloud / SDK / passkeys are out of scope per brief; exhibits use local JWT only. Connector httptest covers vendor `/auth` + `/identity` without a public enrich route.

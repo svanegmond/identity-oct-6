@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-// AC-4 & TP-6 supplemental: Verify architectural package boundaries and seam isolation.
+// AC-4: Verify architectural package boundaries and seam isolation.
 // - DAO (internal/store) must not import HTTP packages or internal/idp or internal/api.
 // - IdP connector (internal/idp) must not import internal/store or internal/api.
 func TestArchitecturalPackageBoundaries(t *testing.T) {

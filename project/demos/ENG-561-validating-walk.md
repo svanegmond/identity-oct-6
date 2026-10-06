@@ -6,8 +6,10 @@ ref: ENG-561
 
 # Validating walk: original Identity scope
 
+**Superseded for public REST:** Lead 2026-10-06 withdrew `POST /profiles/enrich` / composed caller path (AC-10, VC-2, TP-6, U6). Current contract: [brief](../briefs/identity-go-service.md). Current product surface: [engineering handoff](ENG-561-engineering-handoff.md). The traffic below is a historical capture at SHA `45ad2eb` when enrich still existed.
+
 **Task:** ENG-561  
-**Product SHA:** `45ad2eb60214505467a3d778b74764cb3c8817bc`  
+**Historical product SHA:** `45ad2eb60214505467a3d778b74764cb3c8817bc`  
 **This note committed after that SHA.**  
 **Worktree:** `_worktrees/ENG-561`  
 **Related:** [engineering handoff](ENG-561-engineering-handoff.md) · [Proof Parade](ENG-561-identity-go-service.md) · [brief](../briefs/identity-go-service.md)

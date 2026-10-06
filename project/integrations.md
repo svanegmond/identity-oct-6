@@ -137,6 +137,5 @@ type Connector interface {
    - The connector is an egress client that produces `IdentityPII`.
 2. **DAO does not import IdP**:
    - The persistence layer does not import or know about IdP connectors or vendor types.
-3. **Composed Path Seam (SK-2)**:
-   - A composed service or handler (e.g. `POST /profiles/enrich` or CLI command) coordinates between the `Connector` and the caller. It invokes the connector and returns the resulting PII directly to the caller.
-   - Any persistence of this PII via the DAO is optional latitude and explicitly separated from the connector client itself.
+3. **No public REST enrich path**:
+   - The connector is a library seam proved by httptest (AC-9 / TP-5). Public REST does not expose `POST /profiles/enrich` or any composed caller that returns vendor PII to API clients (Lead 2026-10-06; AC-10 / VC-2 withdrawn).

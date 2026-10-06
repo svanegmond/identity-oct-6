@@ -13,7 +13,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/svanegmond/agentic-eng-oct-6/internal/api"
 	"github.com/svanegmond/agentic-eng-oct-6/internal/auth"
-	"github.com/svanegmond/agentic-eng-oct-6/internal/idp"
 	"github.com/svanegmond/agentic-eng-oct-6/internal/store"
 )
 
@@ -70,57 +69,17 @@ func (m *memoryStore) GetCredentialByUsername(ctx context.Context, username stri
 func (m *memoryStore) Close() error               { return nil }
 func (m *memoryStore) Ping(ctx context.Context) error { return nil }
 
-type mockIdPConnector struct {
-	piiToReturn *idp.IdentityPII
-	errToReturn error
-	calledWith  struct {
-		Name  string
-		Phone string
-	}
-}
-
-func (m *mockIdPConnector) Authenticate(ctx context.Context, username, password string) (string, error) {
-	return "mock-idp-token", nil
-}
-
-func (m *mockIdPConnector) GetIdentity(ctx context.Context, token, name, phone string) (*idp.IdentityPII, error) {
-	return m.FetchIdentity(ctx, name, phone)
-}
-
-func (m *mockIdPConnector) FetchIdentity(ctx context.Context, name, phone string) (*idp.IdentityPII, error) {
-	m.calledWith.Name = name
-	m.calledWith.Phone = phone
-	if m.errToReturn != nil {
-		return nil, m.errToReturn
-	}
-	return m.piiToReturn, nil
-}
-
-func setupAPITest(t *testing.T) (http.Handler, *auth.Service, *memoryStore, *mockIdPConnector) {
+func setupAPITest(t *testing.T) (http.Handler, *auth.Service, *memoryStore) {
 	memStore := newMemoryStore()
 	authSvc := auth.NewService("api-test-secret-32-bytes-long!", memStore)
-	idpConn := &mockIdPConnector{
-		piiToReturn: &idp.IdentityPII{
-			Name:  "Test Person",
-			Phone: "+15551234567",
-			Address: idp.Address{
-				StreetAddress: "123 Market St",
-				Locality:      "San Francisco",
-				Region:        "CA",
-				PostalCode:    "94105",
-				Country:       "USA",
-			},
-		},
-	}
-
-	handler := api.NewRouter(memStore, authSvc, idpConn)
-	return handler, authSvc, memStore, idpConn
+	handler := api.NewRouter(memStore, authSvc)
+	return handler, authSvc, memStore
 }
 
 // TP-8: Unit/HTTP: Authenticated profile search and retrieve handlers (valid Bearer)
 // return contracted profile shapes and error model per AC-8 / REST contract.
 func TestAPI_ProfileSearchAndRetrieve_TP8(t *testing.T) {
-	handler, authSvc, memStore, _ := setupAPITest(t)
+	handler, authSvc, memStore := setupAPITest(t)
 	ctx := context.Background()
 
 	// Seed profile
@@ -200,61 +159,9 @@ func TestAPI_ProfileSearchAndRetrieve_TP8(t *testing.T) {
 	}
 }
 
-// TP-6: Unit/integration (behavioral): Composed path invokes the IdP connector
-// and returns PII to the caller without merging IdP into the DAO.
-func TestAPI_ComposedPath_TP6(t *testing.T) {
-	handler, authSvc, _, idpConn := setupAPITest(t)
-
-	token, err := authSvc.IssueToken("u1", "caller", time.Hour)
-	if err != nil {
-		t.Fatalf("failed to issue token: %v", err)
-	}
-
-	// Composed path: POST /profiles/enrich with valid Bearer
-	enrichReq := map[string]string{
-		"name":  "Bruce Wayne",
-		"phone": "+15557778888",
-	}
-	reqBody, _ := json.Marshal(enrichReq)
-
-	req := httptest.NewRequest("POST", "/profiles/enrich", bytes.NewReader(reqBody))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-	rec := httptest.NewRecorder()
-
-	handler.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("POST /profiles/enrich status = %d, want 200, body: %s", rec.Code, rec.Body.String())
-	}
-
-	// Verify connector was called with request parameters
-	if idpConn.calledWith.Name != "Bruce Wayne" || idpConn.calledWith.Phone != "+15557778888" {
-		t.Errorf("IdP connector not called with expected parameters: got %+v", idpConn.calledWith)
-	}
-
-	// Verify PII (including address fields) was returned to caller
-	var pii api.IdentityPII
-	if err := json.NewDecoder(rec.Body).Decode(&pii); err != nil {
-		t.Fatalf("failed to decode returned PII JSON: %v", err)
-	}
-	if pii.Address.StreetAddress == "" || pii.Address.Locality == "" || pii.Address.PostalCode == "" {
-		t.Errorf("expected complete address in returned PII, got: %+v", pii.Address)
-	}
-
-	// Refusal without Bearer: POST /profiles/enrich -> 401
-	reqUnauth := httptest.NewRequest("POST", "/profiles/enrich", bytes.NewReader(reqBody))
-	reqUnauth.Header.Set("Content-Type", "application/json")
-	recUnauth := httptest.NewRecorder()
-	handler.ServeHTTP(recUnauth, reqUnauth)
-	if recUnauth.Code != http.StatusUnauthorized {
-		t.Errorf("POST /profiles/enrich without bearer status = %d, want 401", recUnauth.Code)
-	}
-}
-
 // Test login & registration endpoints
 func TestAPI_LoginAndRegister(t *testing.T) {
-	handler, _, _, _ := setupAPITest(t)
+	handler, _, _ := setupAPITest(t)
 
 	// 1. Register new user
 	regPayload := map[string]string{
@@ -324,7 +231,7 @@ func TestAPI_LoginAndRegister(t *testing.T) {
 // TestAPI_OpenAPIBearerAuthEnforcement verifies OpenAPI BearerAuth security is enforced via nethttp-middleware
 // and confirms 401 responses use a stable unauthorized message without leaking jwt library parse details.
 func TestAPI_OpenAPIBearerAuthEnforcement(t *testing.T) {
-	handler, authSvc, _, _ := setupAPITest(t)
+	handler, authSvc, _ := setupAPITest(t)
 
 	// 1. Missing Authorization header on protected route -> 401 with stable message
 	reqNoAuth := httptest.NewRequest("GET", "/profiles", nil)

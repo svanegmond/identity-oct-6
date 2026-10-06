@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Identity Go Service API (Interview Discussion Object)
-  description: Authenticated REST API for profile search/retrieve and IdP composition.
+  description: Authenticated REST API for profile search and retrieve.
   version: 1.0.0
 servers:
   - url: http://localhost:8080
@@ -138,41 +138,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /profiles/enrich:
-    post:
-      summary: Composed path invoking IdP connector and returning PII to caller
-      operationId: enrichProfile
-      tags:
-        - Profiles
-        - Integrations
-      security:
-        - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/EnrichRequest'
-      responses:
-        '200':
-          description: PII successfully retrieved from IdP and returned to caller
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/IdentityPII'
-        '401':
-          description: Unauthorized (missing or invalid local bearer token)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '502':
-          description: Upstream IdP failure
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
 components:
   securitySchemes:
     BearerAuth:
@@ -261,64 +226,6 @@ components:
         updated_at:
           type: string
           format: date-time
-
-    EnrichRequest:
-      type: object
-      required:
-        - name
-        - phone
-      properties:
-        name:
-          type: string
-          example: "Bob Jones"
-        phone:
-          type: string
-          example: "+15559876543"
-        provider:
-          type: string
-          description: "Target IdP provider name (e.g. ABC or XYC)"
-          default: "ABC"
-
-    Address:
-      type: object
-      required:
-        - street_address
-        - locality
-        - region
-        - postal_code
-        - country
-      properties:
-        street_address:
-          type: string
-          example: "456 Mission St"
-        locality:
-          type: string
-          example: "San Francisco"
-        region:
-          type: string
-          example: "CA"
-        postal_code:
-          type: string
-          example: "94105"
-        country:
-          type: string
-          example: "USA"
-
-    IdentityPII:
-      type: object
-      required:
-        - name
-        - phone
-        - address
-      properties:
-        name:
-          type: string
-          example: "Bob Jones"
-        phone:
-          type: string
-          example: "+15559876543"
-        address:
-          $ref: '#/components/schemas/Address'
 
     ErrorResponse:
       type: object

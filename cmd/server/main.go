@@ -13,7 +13,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/svanegmond/agentic-eng-oct-6/internal/api"
 	"github.com/svanegmond/agentic-eng-oct-6/internal/auth"
-	"github.com/svanegmond/agentic-eng-oct-6/internal/idp"
 	"github.com/svanegmond/agentic-eng-oct-6/internal/store"
 )
 
@@ -22,9 +21,6 @@ func main() {
 	dbDSN := flag.String("dsn", "identity.db", "Database DSN or file path")
 	port := flag.String("port", "8080", "HTTP server port")
 	jwtSecret := flag.String("jwt-secret", "dev-jwt-secret-interview-mock-long-enough", "JWT signing secret key")
-	idpURL := flag.String("idp-url", "http://localhost:8081", "Third-party IdP base URL")
-	idpUser := flag.String("idp-user", "vendor_user", "Third-party IdP username")
-	idpPass := flag.String("idp-pass", "vendor_secret", "Third-party IdP password")
 	seed := flag.Bool("seed", false, "Seed database with demo profile and credentials")
 	flag.Parse()
 
@@ -37,9 +33,6 @@ func main() {
 	}
 	if envDSN := os.Getenv("DSN"); envDSN != "" {
 		*dbDSN = envDSN
-	}
-	if envIdpURL := os.Getenv("IDP_URL"); envIdpURL != "" {
-		*idpURL = envIdpURL
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -60,16 +53,7 @@ func main() {
 	}
 
 	authSvc := auth.NewService(*jwtSecret, dao)
-
-	idpClient := idp.NewClient(idp.ProviderConfig{
-		Name:     "ABC",
-		BaseURL:  *idpURL,
-		Username: *idpUser,
-		Password: *idpPass,
-		Timeout:  10 * time.Second,
-	})
-
-	router := api.NewRouter(dao, authSvc, idpClient)
+	router := api.NewRouter(dao, authSvc)
 
 	srv := &http.Server{
 		Addr:         ":" + *port,

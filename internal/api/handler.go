@@ -12,21 +12,18 @@ import (
 	"github.com/google/uuid"
 	middleware "github.com/oapi-codegen/nethttp-middleware"
 	"github.com/svanegmond/agentic-eng-oct-6/internal/auth"
-	"github.com/svanegmond/agentic-eng-oct-6/internal/idp"
 	"github.com/svanegmond/agentic-eng-oct-6/internal/store"
 )
 
 type Server struct {
 	store   store.DAO
 	authSvc *auth.Service
-	idpConn idp.Connector
 }
 
-func NewServer(s store.DAO, a *auth.Service, i idp.Connector) *Server {
+func NewServer(s store.DAO, a *auth.Service) *Server {
 	return &Server{
 		store:   s,
 		authSvc: a,
-		idpConn: i,
 	}
 }
 
@@ -157,35 +154,9 @@ func (s *Server) SearchProfiles(ctx context.Context, request SearchProfilesReque
 	return SearchProfiles200JSONResponse(response), nil
 }
 
-func (s *Server) EnrichProfile(ctx context.Context, request EnrichProfileRequestObject) (EnrichProfileResponseObject, error) {
-	if request.Body == nil {
-		return EnrichProfile502JSONResponse{Error: "bad_request", Message: "Request body required"}, nil
-	}
-
-	pii, err := s.idpConn.FetchIdentity(ctx, request.Body.Name, request.Body.Phone)
-	if err != nil {
-		return EnrichProfile502JSONResponse{
-			Error:   "upstream_idp_error",
-			Message: fmt.Sprintf("Failed to fetch PII from IdP: %v", err),
-		}, nil
-	}
-
-	return EnrichProfile200JSONResponse{
-		Name:  pii.Name,
-		Phone: pii.Phone,
-		Address: Address{
-			StreetAddress: pii.Address.StreetAddress,
-			Locality:      pii.Address.Locality,
-			Region:        pii.Address.Region,
-			PostalCode:    pii.Address.PostalCode,
-			Country:       pii.Address.Country,
-		},
-	}, nil
-}
-
 // NewRouter wires OpenAPI handlers and JWT bearer authentication middleware via nethttp-middleware.
-func NewRouter(s store.DAO, a *auth.Service, i idp.Connector) http.Handler {
-	srv := NewServer(s, a, i)
+func NewRouter(s store.DAO, a *auth.Service) http.Handler {
+	srv := NewServer(s, a)
 	strictHandler := NewStrictHandler(srv, nil)
 	apiHandler := Handler(strictHandler)
 

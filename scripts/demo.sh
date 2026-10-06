@@ -2,18 +2,17 @@
 set -euo pipefail
 
 # Demo script for ENG-561 Identity Go service
-# Demonstrates original-spec use cases U1 through U6
+# Demonstrates use cases U1 through U5 (persist, login, retrieve, search, auth gate)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKTREE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${WORKTREE_DIR}"
 
 SERVER_PORT="${DEMO_SERVER_PORT:-8088}"
-IDP_PORT="${DEMO_IDP_PORT:-8089}"
 DB_PATH="${DEMO_DB_PATH:-demo_identity.db}"
 
 echo "================================================================="
-echo " ENG-561 Identity Go Service: Use Case Demo Walk (U1 - U6)"
+echo " ENG-561 Identity Go Service: Use Case Demo Walk (U1 - U5)"
 echo "================================================================="
 
 # Clean up any stale db or processes
@@ -22,7 +21,6 @@ rm -f "${DB_PATH}"
 # Build binaries if missing
 mkdir -p bin
 go build -o bin/server ./cmd/server
-go build -o bin/fake-idp ./cmd/fake-idp
 
 # Cleanup trap
 cleanup() {
@@ -32,27 +30,16 @@ cleanup() {
     kill "${SERVER_PID}" 2>/dev/null || true
     wait "${SERVER_PID}" 2>/dev/null || true
   fi
-  if [[ -n "${IDP_PID:-}" ]]; then
-    kill "${IDP_PID}" 2>/dev/null || true
-    wait "${IDP_PID}" 2>/dev/null || true
-  fi
   rm -f "${DB_PATH}"
   echo "Demo completed and cleaned up."
 }
 trap cleanup EXIT
 
-# 1. Start Fake IdP simulator
-./bin/fake-idp -port "${IDP_PORT}" > /dev/null 2>&1 &
-IDP_PID=$!
-
-# 2. Start Identity Go service (SQLite default, docker-free)
+# Start Identity Go service (SQLite default, docker-free)
 ./bin/server \
   -db sqlite \
   -dsn "${DB_PATH}" \
   -port "${SERVER_PORT}" \
-  -idp-url "http://localhost:${IDP_PORT}" \
-  -idp-user "vendor_user" \
-  -idp-pass "vendor_secret" \
   -seed > /dev/null 2>&1 &
 SERVER_PID=$!
 
@@ -152,19 +139,5 @@ fi
 
 echo ""
 echo "================================================================="
-echo "[U6] IdP connector composed path: invoke connector -> return PII"
-echo "================================================================="
-echo "POST http://localhost:${SERVER_PORT}/profiles/enrich"
-echo "Header: Authorization: Bearer <token>"
-echo "Payload: {\"name\": \"Robert Taylor\", \"phone\": \"+15552345678\"}"
-ENRICH_RESP=$(curl -s -X POST "http://localhost:${SERVER_PORT}/profiles/enrich" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Robert Taylor","phone":"+15552345678"}')
-echo "Response:"
-echo "${ENRICH_RESP}"
-
-echo ""
-echo "================================================================="
-echo " All use cases U1 through U6 successfully demonstrated!"
+echo " All use cases U1 through U5 successfully demonstrated!"
 echo "================================================================="
