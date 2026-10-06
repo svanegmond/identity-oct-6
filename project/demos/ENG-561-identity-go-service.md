@@ -16,7 +16,7 @@
 | AC-4 | What-landed: separation statements in contracts | `internal/boundary_test.go:TestArchitecturalPackageBoundaries`, `project/schemas.md § 5`, `project/integrations.md § 4` | DAO/HTTP/IdP seams named and enforced |
 | AC-5 | What-landed: commit order Phase A before B | Git commit `2c29cae` (Phase A) landed before `8c9dd67` (Phase B) | Sequencing held |
 | AC-6 | TP-2, TP-3 / What-landed DAO packages | `internal/store/sqlite_test.go:TestSQLiteDAO_StoreRetrieveSearch`, `internal/store/postgres_test.go:TestPostgresDAO_StoreRetrieveSearch` | Dual-DB DAO landed |
-| AC-7 | TP-4 / Exhibit Auth+profile | `internal/auth/jwt_test.go:TestAuthService_TokenIssueAndVerify`, `TestAuthService_CredentialCheckAndLogin`, `TestAuthMiddleware_Protection`, Exhibit: Auth+profile round-trip | JWT issue + verify |
+| AC-7 | TP-4 / Exhibit Auth+profile | `internal/auth/jwt_test.go:TestAuthService_TokenIssueAndVerify`, `TestAuthService_CredentialCheckAndLogin`, `TestAuthService_AuthenticateBearer`, `internal/api/api_test.go:TestAPI_OpenAPIBearerAuthEnforcement`, Exhibit: Auth+profile round-trip | JWT issue + verify |
 | AC-8 | TP-8 + Exhibit Auth+profile (search) | `internal/api/api_test.go:TestAPI_ProfileSearchAndRetrieve_TP8`, Exhibit: Auth+profile round-trip | Profile search/retrieve |
 | AC-9 | TP-5 | `internal/idp/connector_test.go:TestIdPConnector_WireMappingAndBothConfigs` | Connector wire fidelity |
 | AC-10 | TP-6 / Exhibit Composed IdP path | `internal/api/api_test.go:TestAPI_ComposedPath_TP6`, Exhibit: Composed IdP path | Composed PII path (SK-2) |
@@ -28,7 +28,7 @@
 | TP-1 | Commit order / artifact paths | Commit `2c29cae` (Phase A contracts) before `8c9dd67` (Phase B implementation) | Phase A before B |
 | TP-2 | Named DAO SQLite test | `internal/store/sqlite_test.go:TestSQLiteDAO_StoreRetrieveSearch` | SQLite DAO |
 | TP-3 | Named PG testcontainers test | `internal/store/postgres_test.go:TestPostgresDAO_StoreRetrieveSearch` | Postgres DAO |
-| TP-4 | Named JWT auth tests | `internal/auth/jwt_test.go:TestAuthService_TokenIssueAndVerify`, `TestAuthService_CredentialCheckAndLogin`, `TestAuthMiddleware_Protection` | Auth gate |
+| TP-4 | Named JWT auth tests | `internal/auth/jwt_test.go:TestAuthService_TokenIssueAndVerify`, `TestAuthService_CredentialCheckAndLogin`, `TestAuthService_AuthenticateBearer`, `internal/api/api_test.go:TestAPI_OpenAPIBearerAuthEnforcement` | Auth gate |
 | TP-5 | Named connector mapping tests | `internal/idp/connector_test.go:TestIdPConnector_WireMappingAndBothConfigs` | IdP shapes |
 | TP-6 | Named composed-path behavioral test (+ optional boundary) | `internal/api/api_test.go:TestAPI_ComposedPath_TP6`, `internal/boundary_test.go:TestArchitecturalPackageBoundaries` | SK-2 composition |
 | TP-7 | `go test ./...` | `go test -v ./...` exits 0 | Full suite |
@@ -43,7 +43,7 @@
 ## What landed
 
 - **DAO contract / AC-1, AC-6:** `project/schemas.md` defines the Go-facing `store.DAO` interface and schemas. Implemented in `internal/store/dao.go`, `internal/store/sqlite.go`, and `internal/store/postgres.go` using `goose` embedded migrations and `sqlc` dual packages (`sqlc_sqlite` and `sqlc_postgres`). Callers select driver via `store.DBConfig` and never import DB drivers.
-- **REST + JWT / AC-2, AC-7, AC-8:** `project/openapi.yaml` and `project/decisions/rest-api-jwt-bearer.md` lock OpenAPI 3.0 and JWT bearer authentication. Implemented via `internal/api/handler.go` (`oapi-codegen` generated `internal/api/api.gen.go`) and `internal/auth/auth.go` (`golang-jwt/jwt/v5`). Login issues token on credential match; protected `/profiles` routes reject unauthenticated requests with HTTP 401.
+- **REST + JWT / AC-2, AC-7, AC-8:** `project/openapi.yaml` and `project/decisions/rest-api-jwt-bearer.md` lock OpenAPI 3.0 and JWT bearer authentication. Implemented via `internal/api/handler.go` (`oapi-codegen` generated `internal/api/api.gen.go`), `internal/auth/auth.go` (`golang-jwt/jwt/v5`), and `nethttp-middleware` delegating to a shared `auth.Service.AuthenticateBearer` path. Login issues token on credential match; protected `/profiles` routes reject unauthenticated requests with HTTP 401 and a stable unauthorized message without echoing jwt parse details.
 - **IdP connector / AC-3, AC-9:** `project/integrations.md` specifies external IdP wire contracts (`POST /auth` and `POST /identity` with address object). Implemented in `internal/idp/connector.go` with automatic authentication, in-memory token caching with skew safety, and pluggable provider configs for ABC and XYC.
 - **Composed path / AC-10:** Authenticated route `POST /profiles/enrich` calls the `idp.Connector` (`/auth` then `/identity`) and returns full PII (name, phone, address object) to the caller without merging IdP types into the DAO interface. Package boundary enforcement verified in `internal/boundary_test.go`.
 - **Locked dependencies & middleware / AC-11:** All locked modules from Dependency / Technology Decisions are honest in `go.mod`: `github.com/golang-jwt/jwt/v5`, `github.com/jackc/pgx/v5`, `modernc.org/sqlite`, `github.com/pressly/goose/v3`, `github.com/oapi-codegen/oapi-codegen/v2` (locked via direct require, `tool` directive in `go.mod`, and `internal/tools/tools.go`), `github.com/oapi-codegen/runtime`, `github.com/oapi-codegen/nethttp-middleware` (direct require, wired in `internal/api/handler.go`), `github.com/getkin/kin-openapi`, `github.com/google/uuid`, and `github.com/testcontainers/testcontainers-go/modules/postgres`. OpenAPI `BearerAuth` security is enforced via `nethttp-middleware` rather than URL prefix matching.
@@ -103,7 +103,11 @@ sequenceDiagram
 [U1] Durable local persistence: credential + profile stored
 =================================================================
 Identity service started with SQLite storage at demo_identity.db and seeded data.
-Verified: SQLite database initialized, goose migrations applied, and user credential/profile records stored.
+Querying SQLite directly for seeded profile (Alice Smith)...
+SQLite profile row: 11111111-1111-1111-1111-111111111111|Alice Smith|+15551234567
+Querying SQLite directly for seeded credential (alice)...
+SQLite credential row: 11111111-1111-1111-1111-111111111111|alice|password
+Verified: Real SQLite readback confirmed seeded profile and credential persistence.
 
 =================================================================
 [U2] Credential check -> API auth: login and obtain JWT
@@ -111,7 +115,7 @@ Verified: SQLite database initialized, goose migrations applied, and user creden
 POST http://localhost:8088/auth/login
 Payload: {"username": "alice", "password": "password123"}
 Response:
-{"expires_in":86400,"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMTExMTExMTEtMTExMS0xMTExLTExMTEtMTExMTExMTExMTExIiwidXNlcm5hbWUiOiJhbGljZSIsImlzcyI6ImlkZW50aXR5LWdvLXNlcnZpY2UiLCJzdWIiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJleHAiOjE3OTEzNDcyMTEsImlhdCI6MTc5MTI2MDgxMX0.ty-dYBXYktW-Nf9RWg3I26zEo6wnP_C2o3G6K7iBngk","token_type":"Bearer"}
+{"expires_in":86400,"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMTExMTExMTEtMTExMS0xMTExLTExMTEtMTExMTExMTExMTExIiwidXNlcm5hbWUiOiJhbGljZSIsImlzcyI6ImlkZW50aXR5LWdvLXNlcnZpY2UiLCJzdWIiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJleHAiOjE3OTEzNTg0OTAsImlhdCI6MTc5MTI3MjA5MH0.L9PEjf263Ek9p9xfC93FgzzXG5iT8f0pbM5VppnMdfw","token_type":"Bearer"}
 Extracted Bearer Token: eyJhbGciOiJIUzI1NiIsInR5cCI6Ik...
 
 =================================================================
@@ -120,7 +124,7 @@ Extracted Bearer Token: eyJhbGciOiJIUzI1NiIsInR5cCI6Ik...
 GET http://localhost:8088/profiles/11111111-1111-1111-1111-111111111111
 Header: Authorization: Bearer <token>
 Response:
-{"address":"123 Market St, San Francisco, CA 94105","created_at":"2026-10-06T04:26:51.858178Z","id":"11111111-1111-1111-1111-111111111111","name":"Alice Smith","phone":"+15551234567","updated_at":"2026-10-06T04:26:51.858178Z"}
+{"address":"123 Market St, San Francisco, CA 94105","created_at":"2026-10-06T07:34:50.649266Z","id":"11111111-1111-1111-1111-111111111111","name":"Alice Smith","phone":"+15551234567","updated_at":"2026-10-06T07:34:50.649266Z"}
 
 =================================================================
 [U4] Authenticated profile search: Bearer + search profiles
@@ -128,7 +132,7 @@ Response:
 GET http://localhost:8088/profiles?name=Smith
 Header: Authorization: Bearer <token>
 Response:
-[{"address":"123 Market St, San Francisco, CA 94105","created_at":"2026-10-06T04:26:51.858178Z","id":"11111111-1111-1111-1111-111111111111","name":"Alice Smith","phone":"+15551234567","updated_at":"2026-10-06T04:26:51.858178Z"},{"address":"456 Castro St, Mountain View, CA 94041","created_at":"2026-10-06T04:26:51.858178Z","id":"22222222-2222-2222-2222-222222222222","name":"Bob Smith","phone":"+15559876543","updated_at":"2026-10-06T04:26:51.858178Z"}]
+[{"address":"123 Market St, San Francisco, CA 94105","created_at":"2026-10-06T07:34:50.649266Z","id":"11111111-1111-1111-1111-111111111111","name":"Alice Smith","phone":"+15551234567","updated_at":"2026-10-06T07:34:50.649266Z"},{"address":"456 Castro St, Mountain View, CA 94041","created_at":"2026-10-06T07:34:50.649266Z","id":"22222222-2222-2222-2222-222222222222","name":"Bob Smith","phone":"+15559876543","updated_at":"2026-10-06T07:34:50.649266Z"}]
 ```
 
 ### Exhibit: Composed IdP path
@@ -160,11 +164,11 @@ Response:
 =================================================================
 GET http://localhost:8088/profiles/11111111-1111-1111-1111-111111111111 (no Authorization header)
 HTTP Status: 401
-Response: {"error":"unauthorized","message":"security requirements failed: missing Authorization header"}
+Response: {"error":"unauthorized","message":"Unauthorized: missing or invalid bearer token"}
 
 GET http://localhost:8088/profiles/11111111-1111-1111-1111-111111111111 (invalid Bearer token)
 HTTP Status: 401
-Response: {"error":"unauthorized","message":"security requirements failed: invalid or expired bearer token: invalid token: token is malformed: token contains an invalid number of segments"}
+Response: {"error":"unauthorized","message":"Unauthorized: missing or invalid bearer token"}
 ```
 
 ### Exhibit: Spec use-case demo walk
@@ -187,7 +191,11 @@ go build -o bin/fake-idp ./cmd/fake-idp
 [U1] Durable local persistence: credential + profile stored
 =================================================================
 Identity service started with SQLite storage at demo_identity.db and seeded data.
-Verified: SQLite database initialized, goose migrations applied, and user credential/profile records stored.
+Querying SQLite directly for seeded profile (Alice Smith)...
+SQLite profile row: 11111111-1111-1111-1111-111111111111|Alice Smith|+15551234567
+Querying SQLite directly for seeded credential (alice)...
+SQLite credential row: 11111111-1111-1111-1111-111111111111|alice|password
+Verified: Real SQLite readback confirmed seeded profile and credential persistence.
 
 =================================================================
 [U2] Credential check -> API auth: login and obtain JWT
@@ -195,7 +203,7 @@ Verified: SQLite database initialized, goose migrations applied, and user creden
 POST http://localhost:8088/auth/login
 Payload: {"username": "alice", "password": "password123"}
 Response:
-{"expires_in":86400,"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMTExMTExMTEtMTExMS0xMTExLTExMTEtMTExMTExMTExMTExIiwidXNlcm5hbWUiOiJhbGljZSIsImlzcyI6ImlkZW50aXR5LWdvLXNlcnZpY2UiLCJzdWIiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJleHAiOjE3OTEzNDgzMzMsImlhdCI6MTc5MTI2MTkzM30.UL3MlUCCyT-3yaHVgU9aGd9jJUpqLQPlw9LHW2gLdkU","token_type":"Bearer"}
+{"expires_in":86400,"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMTExMTExMTEtMTExMS0xMTExLTExMTEtMTExMTExMTExMTExIiwidXNlcm5hbWUiOiJhbGljZSIsImlzcyI6ImlkZW50aXR5LWdvLXNlcnZpY2UiLCJzdWIiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJleHAiOjE3OTEzNTg0OTAsImlhdCI6MTc5MTI3MjA5MH0.L9PEjf263Ek9p9xfC93FgzzXG5iT8f0pbM5VppnMdfw","token_type":"Bearer"}
 Extracted Bearer Token: eyJhbGciOiJIUzI1NiIsInR5cCI6Ik...
 
 =================================================================
@@ -204,7 +212,7 @@ Extracted Bearer Token: eyJhbGciOiJIUzI1NiIsInR5cCI6Ik...
 GET http://localhost:8088/profiles/11111111-1111-1111-1111-111111111111
 Header: Authorization: Bearer <token>
 Response:
-{"address":"123 Market St, San Francisco, CA 94105","created_at":"2026-10-06T04:45:33.53559Z","id":"11111111-1111-1111-1111-111111111111","name":"Alice Smith","phone":"+15551234567","updated_at":"2026-10-06T04:45:33.53559Z"}
+{"address":"123 Market St, San Francisco, CA 94105","created_at":"2026-10-06T07:34:50.649266Z","id":"11111111-1111-1111-1111-111111111111","name":"Alice Smith","phone":"+15551234567","updated_at":"2026-10-06T07:34:50.649266Z"}
 
 =================================================================
 [U4] Authenticated profile search: Bearer + search profiles
@@ -212,18 +220,18 @@ Response:
 GET http://localhost:8088/profiles?name=Smith
 Header: Authorization: Bearer <token>
 Response:
-[{"address":"123 Market St, San Francisco, CA 94105","created_at":"2026-10-06T04:45:33.53559Z","id":"11111111-1111-1111-1111-111111111111","name":"Alice Smith","phone":"+15551234567","updated_at":"2026-10-06T04:45:33.53559Z"},{"address":"456 Castro St, Mountain View, CA 94041","created_at":"2026-10-06T04:45:33.53559Z","id":"22222222-2222-2222-2222-222222222222","name":"Bob Smith","phone":"+15559876543","updated_at":"2026-10-06T04:45:33.53559Z"}]
+[{"address":"123 Market St, San Francisco, CA 94105","created_at":"2026-10-06T07:34:50.649266Z","id":"11111111-1111-1111-1111-111111111111","name":"Alice Smith","phone":"+15551234567","updated_at":"2026-10-06T07:34:50.649266Z"},{"address":"456 Castro St, Mountain View, CA 94041","created_at":"2026-10-06T07:34:50.649266Z","id":"22222222-2222-2222-2222-222222222222","name":"Bob Smith","phone":"+15559876543","updated_at":"2026-10-06T07:34:50.649266Z"}]
 
 =================================================================
 [U5] Auth gate refusal: missing/invalid bearer rejected (401)
 =================================================================
 GET http://localhost:8088/profiles/11111111-1111-1111-1111-111111111111 (no Authorization header)
 HTTP Status: 401
-Response: {"error":"unauthorized","message":"security requirements failed: missing Authorization header"}
+Response: {"error":"unauthorized","message":"Unauthorized: missing or invalid bearer token"}
 
 GET http://localhost:8088/profiles/11111111-1111-1111-1111-111111111111 (invalid Bearer token)
 HTTP Status: 401
-Response: {"error":"unauthorized","message":"security requirements failed: invalid or expired bearer token: invalid token: token is malformed: token contains an invalid number of segments"}
+Response: {"error":"unauthorized","message":"Unauthorized: missing or invalid bearer token"}
 
 =================================================================
 [U6] IdP connector composed path: invoke connector -> return PII
@@ -250,7 +258,8 @@ Demo completed and cleaned up.
 - **Named tests:**
   - `internal/store/sqlite_test.go:TestSQLiteDAO_StoreRetrieveSearch` (TP-2)
   - `internal/store/postgres_test.go:TestPostgresDAO_StoreRetrieveSearch` (TP-3)
-  - `internal/auth/jwt_test.go:TestAuthService_TokenIssueAndVerify`, `TestAuthService_CredentialCheckAndLogin`, `TestAuthMiddleware_Protection` (TP-4)
+  - `internal/auth/jwt_test.go:TestAuthService_TokenIssueAndVerify`, `TestAuthService_CredentialCheckAndLogin`, `TestAuthService_AuthenticateBearer` (TP-4)
+  - `internal/api/api_test.go:TestAPI_OpenAPIBearerAuthEnforcement` (TP-4 live router gate)
   - `internal/idp/connector_test.go:TestIdPConnector_WireMappingAndBothConfigs` (TP-5)
   - `internal/api/api_test.go:TestAPI_ComposedPath_TP6` (TP-6)
   - `internal/boundary_test.go:TestArchitecturalPackageBoundaries` (AC-4 / TP-6 supplemental)

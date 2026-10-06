@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/getkin/kin-openapi/openapi3filter"
@@ -203,6 +202,7 @@ func NewRouter(s store.DAO, a *auth.Service, i idp.Connector) http.Handler {
 			errKind := "bad_request"
 			if statusCode == http.StatusUnauthorized {
 				errKind = "unauthorized"
+				message = "Unauthorized: missing or invalid bearer token"
 			} else if statusCode == http.StatusNotFound {
 				errKind = "not_found"
 			}
@@ -217,23 +217,12 @@ func NewRouter(s store.DAO, a *auth.Service, i idp.Connector) http.Handler {
 					return nil
 				}
 
-				authHeader := input.RequestValidationInput.Request.Header.Get("Authorization")
-				if authHeader == "" {
-					return errors.New("missing Authorization header")
-				}
-
-				parts := strings.SplitN(authHeader, " ", 2)
-				if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-					return errors.New("invalid Authorization header format; Bearer required")
-				}
-
-				tokenStr := strings.TrimSpace(parts[1])
-				claims, err := a.VerifyToken(tokenStr)
-				if err != nil {
-					return fmt.Errorf("invalid or expired bearer token: %w", err)
-				}
-
 				req := input.RequestValidationInput.Request
+				claims, err := a.AuthenticateBearer(req.Header.Get("Authorization"))
+				if err != nil {
+					return err
+				}
+
 				*req = *req.WithContext(auth.ContextWithClaims(req.Context(), claims))
 				return nil
 			},

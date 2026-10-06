@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -17,6 +16,8 @@ var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrInvalidToken       = errors.New("invalid token")
 	ErrTokenExpired       = errors.New("token expired")
+	ErrMissingAuthHeader  = errors.New("missing Authorization header")
+	ErrInvalidAuthHeader  = errors.New("invalid Authorization header format; Bearer required")
 )
 
 type contextKey string
@@ -70,7 +71,7 @@ func (s *Service) VerifyToken(tokenString string) (*Claims, error) {
 		return s.secretKey, nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidToken, err)
+		return nil, ErrInvalidToken
 	}
 
 	claims, ok := token.Claims.(*Claims)
@@ -79,6 +80,26 @@ func (s *Service) VerifyToken(tokenString string) (*Claims, error) {
 	}
 
 	return claims, nil
+}
+
+// AuthenticateBearer extracts and verifies a Bearer token from the Authorization header value.
+func (s *Service) AuthenticateBearer(authHeader string) (*Claims, error) {
+	if authHeader == "" {
+		return nil, ErrMissingAuthHeader
+	}
+
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return nil, ErrInvalidAuthHeader
+	}
+
+	tokenString := strings.TrimSpace(parts[1])
+	return s.VerifyToken(tokenString)
+}
+
+// AuthenticateRequest extracts and verifies a Bearer token from an incoming HTTP request.
+func (s *Service) AuthenticateRequest(r *http.Request) (*Claims, error) {
+	return s.AuthenticateBearer(r.Header.Get("Authorization"))
 }
 
 func (s *Service) Login(ctx context.Context, username, password string) (string, error) {
@@ -98,32 +119,6 @@ func (s *Service) Login(ctx context.Context, username, password string) (string,
 	return s.IssueToken(cred.UserID, cred.Username, 24*time.Hour)
 }
 
-func (s *Service) Middleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			writeAuthError(w, http.StatusUnauthorized, "Missing Authorization header")
-			return
-		}
-
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			writeAuthError(w, http.StatusUnauthorized, "Invalid Authorization header format; Bearer required")
-			return
-		}
-
-		tokenString := strings.TrimSpace(parts[1])
-		claims, err := s.VerifyToken(tokenString)
-		if err != nil {
-			writeAuthError(w, http.StatusUnauthorized, "Invalid or expired bearer token")
-			return
-		}
-
-		ctx := ContextWithClaims(r.Context(), claims)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-
 func ContextWithClaims(ctx context.Context, claims *Claims) context.Context {
 	return context.WithValue(ctx, claimsContextKey, claims)
 }
@@ -134,13 +129,4 @@ func ClaimsFromContext(ctx context.Context) *Claims {
 		return nil
 	}
 	return claims
-}
-
-func writeAuthError(w http.ResponseWriter, code int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"error":   "unauthorized",
-		"message": message,
-	})
 }

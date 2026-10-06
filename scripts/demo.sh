@@ -69,7 +69,19 @@ echo "================================================================="
 echo "[U1] Durable local persistence: credential + profile stored"
 echo "================================================================="
 echo "Identity service started with SQLite storage at ${DB_PATH} and seeded data."
-echo "Verified: SQLite database initialized, goose migrations applied, and user credential/profile records stored."
+echo "Querying SQLite directly for seeded profile (Alice Smith)..."
+SEEDED_PROFILE=$(sqlite3 "${DB_PATH}" "SELECT id, name, phone FROM user_profiles WHERE id='11111111-1111-1111-1111-111111111111';")
+echo "SQLite profile row: ${SEEDED_PROFILE}"
+
+echo "Querying SQLite directly for seeded credential (alice)..."
+SEEDED_CRED=$(sqlite3 "${DB_PATH}" "SELECT user_id, username, method FROM user_credentials WHERE username='alice';")
+echo "SQLite credential row: ${SEEDED_CRED}"
+
+if [[ -z "${SEEDED_PROFILE}" || -z "${SEEDED_CRED}" ]]; then
+  echo "ERROR: Direct SQLite readback failed to verify seeded profile or credential!"
+  exit 1
+fi
+echo "Verified: Real SQLite readback confirmed seeded profile and credential persistence."
 
 echo ""
 echo "================================================================="

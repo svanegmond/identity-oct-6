@@ -321,11 +321,27 @@ func TestAPI_LoginAndRegister(t *testing.T) {
 	}
 }
 
-// TestAPI_OpenAPIBearerAuthEnforcement verifies OpenAPI BearerAuth security is enforced via nethttp-middleware.
+// TestAPI_OpenAPIBearerAuthEnforcement verifies OpenAPI BearerAuth security is enforced via nethttp-middleware
+// and confirms 401 responses use a stable unauthorized message without leaking jwt library parse details.
 func TestAPI_OpenAPIBearerAuthEnforcement(t *testing.T) {
-	handler, _, _, _ := setupAPITest(t)
+	handler, authSvc, _, _ := setupAPITest(t)
 
-	// 1. Basic auth instead of Bearer on protected route -> 401
+	// 1. Missing Authorization header on protected route -> 401 with stable message
+	reqNoAuth := httptest.NewRequest("GET", "/profiles", nil)
+	recNoAuth := httptest.NewRecorder()
+	handler.ServeHTTP(recNoAuth, reqNoAuth)
+	if recNoAuth.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for missing auth on protected route, got %d", recNoAuth.Code)
+	}
+	var errRespNoAuth api.ErrorResponse
+	if err := json.NewDecoder(recNoAuth.Body).Decode(&errRespNoAuth); err != nil {
+		t.Fatalf("failed to decode error response: %v", err)
+	}
+	if errRespNoAuth.Error != "unauthorized" || errRespNoAuth.Message != "Unauthorized: missing or invalid bearer token" {
+		t.Errorf("unexpected 401 response body for missing auth: %+v", errRespNoAuth)
+	}
+
+	// 2. Basic auth instead of Bearer on protected route -> 401 with stable message
 	reqBasic := httptest.NewRequest("GET", "/profiles", nil)
 	reqBasic.Header.Set("Authorization", "Basic dXNlcjpwYXNz")
 	recBasic := httptest.NewRecorder()
@@ -333,8 +349,15 @@ func TestAPI_OpenAPIBearerAuthEnforcement(t *testing.T) {
 	if recBasic.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401 for Basic auth on protected route, got %d", recBasic.Code)
 	}
+	var errRespBasic api.ErrorResponse
+	if err := json.NewDecoder(recBasic.Body).Decode(&errRespBasic); err != nil {
+		t.Fatalf("failed to decode error response: %v", err)
+	}
+	if errRespBasic.Error != "unauthorized" || errRespBasic.Message != "Unauthorized: missing or invalid bearer token" {
+		t.Errorf("unexpected 401 response body for basic auth: %+v", errRespBasic)
+	}
 
-	// 2. Corrupted Bearer token on protected route -> 401
+	// 3. Corrupted Bearer token on protected route -> 401 with stable message (no jwt parse detail leak)
 	reqCorrupt := httptest.NewRequest("GET", "/profiles", nil)
 	reqCorrupt.Header.Set("Authorization", "Bearer invalid.jwt.token")
 	recCorrupt := httptest.NewRecorder()
@@ -342,8 +365,31 @@ func TestAPI_OpenAPIBearerAuthEnforcement(t *testing.T) {
 	if recCorrupt.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401 for corrupt token, got %d", recCorrupt.Code)
 	}
+	var errRespCorrupt api.ErrorResponse
+	if err := json.NewDecoder(recCorrupt.Body).Decode(&errRespCorrupt); err != nil {
+		t.Fatalf("failed to decode error response: %v", err)
+	}
+	if errRespCorrupt.Error != "unauthorized" || errRespCorrupt.Message != "Unauthorized: missing or invalid bearer token" {
+		t.Errorf("unexpected 401 response body for corrupt token: %+v", errRespCorrupt)
+	}
+	if strings.Contains(errRespCorrupt.Message, "token is malformed") || strings.Contains(errRespCorrupt.Message, "jwt") {
+		t.Errorf("401 message must not echo jwt library details: %s", errRespCorrupt.Message)
+	}
 
-	// 3. Unprotected route (/auth/login) does not enforce BearerAuth
+	// 4. Valid Bearer token on protected route -> 200 OK
+	validToken, err := authSvc.IssueToken("u1", "testuser", time.Hour)
+	if err != nil {
+		t.Fatalf("failed to issue valid token: %v", err)
+	}
+	reqValid := httptest.NewRequest("GET", "/profiles", nil)
+	reqValid.Header.Set("Authorization", "Bearer "+validToken)
+	recValid := httptest.NewRecorder()
+	handler.ServeHTTP(recValid, reqValid)
+	if recValid.Code != http.StatusOK {
+		t.Errorf("expected 200 for valid Bearer token on protected route, got %d", recValid.Code)
+	}
+
+	// 5. Unprotected route (/auth/login) does not enforce BearerAuth
 	loginPayload := map[string]string{
 		"username": "user",
 		"password": "wrong",

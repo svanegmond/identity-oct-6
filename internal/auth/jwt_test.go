@@ -2,8 +2,7 @@ package auth_test
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
+	"errors"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -115,59 +114,48 @@ func TestAuthService_CredentialCheckAndLogin(t *testing.T) {
 	}
 }
 
-func TestAuthMiddleware_Protection(t *testing.T) {
+func TestAuthService_AuthenticateBearer(t *testing.T) {
 	svc := auth.NewService("mock-secret-key", &mockStore{})
 
-	// Protected handler returns 200 OK
-	protectedHandler := svc.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		claims := auth.ClaimsFromContext(r.Context())
-		if claims == nil {
-			t.Errorf("expected claims in context")
-		}
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok"}`))
-	}))
-
-	// Case 1: Missing Authorization header -> 401
-	req1 := httptest.NewRequest("GET", "/protected", nil)
-	rec1 := httptest.NewRecorder()
-	protectedHandler.ServeHTTP(rec1, req1)
-	if rec1.Code != http.StatusUnauthorized {
-		t.Errorf("expected 401 for missing auth header, got %d", rec1.Code)
-	}
-	var errResp map[string]interface{}
-	if err := json.NewDecoder(rec1.Body).Decode(&errResp); err != nil || errResp["error"] == nil {
-		t.Errorf("expected error response JSON, got %v", rec1.Body.String())
+	// Case 1: Missing Authorization header -> ErrMissingAuthHeader
+	_, err := svc.AuthenticateBearer("")
+	if !errors.Is(err, auth.ErrMissingAuthHeader) {
+		t.Errorf("expected ErrMissingAuthHeader for empty header, got %v", err)
 	}
 
-	// Case 2: Invalid bearer format -> 401
-	req2 := httptest.NewRequest("GET", "/protected", nil)
-	req2.Header.Set("Authorization", "Basic dXNlcjpwYXNz")
-	rec2 := httptest.NewRecorder()
-	protectedHandler.ServeHTTP(rec2, req2)
-	if rec2.Code != http.StatusUnauthorized {
-		t.Errorf("expected 401 for non-bearer auth, got %d", rec2.Code)
+	// Case 2: Non-bearer auth -> ErrInvalidAuthHeader
+	_, err = svc.AuthenticateBearer("Basic dXNlcjpwYXNz")
+	if !errors.Is(err, auth.ErrInvalidAuthHeader) {
+		t.Errorf("expected ErrInvalidAuthHeader for basic auth, got %v", err)
 	}
 
-	// Case 3: Invalid token string -> 401
-	req3 := httptest.NewRequest("GET", "/protected", nil)
-	req3.Header.Set("Authorization", "Bearer invalid-token-string")
-	rec3 := httptest.NewRecorder()
-	protectedHandler.ServeHTTP(rec3, req3)
-	if rec3.Code != http.StatusUnauthorized {
-		t.Errorf("expected 401 for invalid bearer token, got %d", rec3.Code)
+	// Case 3: Invalid token string -> ErrInvalidToken
+	_, err = svc.AuthenticateBearer("Bearer invalid-token-string")
+	if !errors.Is(err, auth.ErrInvalidToken) {
+		t.Errorf("expected ErrInvalidToken for invalid token, got %v", err)
 	}
 
-	// Case 4: Valid bearer token -> 200
+	// Case 4: Valid bearer token -> success
 	validToken, err := svc.IssueToken("u1", "alice", time.Hour)
 	if err != nil {
 		t.Fatalf("failed to issue valid token: %v", err)
 	}
-	req4 := httptest.NewRequest("GET", "/protected", nil)
-	req4.Header.Set("Authorization", "Bearer "+validToken)
-	rec4 := httptest.NewRecorder()
-	protectedHandler.ServeHTTP(rec4, req4)
-	if rec4.Code != http.StatusOK {
-		t.Errorf("expected 200 for valid bearer token, got %d", rec4.Code)
+	claims, err := svc.AuthenticateBearer("Bearer " + validToken)
+	if err != nil {
+		t.Fatalf("AuthenticateBearer failed for valid token: %v", err)
+	}
+	if claims.UserID != "u1" || claims.Username != "alice" {
+		t.Errorf("claims mismatch: got %+v", claims)
+	}
+
+	// Case 5: AuthenticateRequest with valid HTTP request
+	req := httptest.NewRequest("GET", "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+validToken)
+	reqClaims, err := svc.AuthenticateRequest(req)
+	if err != nil {
+		t.Fatalf("AuthenticateRequest failed: %v", err)
+	}
+	if reqClaims.UserID != "u1" || reqClaims.Username != "alice" {
+		t.Errorf("claims mismatch from request: got %+v", reqClaims)
 	}
 }
