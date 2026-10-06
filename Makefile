@@ -1,4 +1,4 @@
-.PHONY: all build test demo clean generate
+.PHONY: all build test demo clean generate ir-instrument
 
 all: build
 
@@ -16,6 +16,12 @@ test:
 
 demo: build
 	./scripts/demo.sh
+
+IR_INSTRUMENT ?= $(shell test -x /Users/svanegmond/src/helm/nonlinear/.venv/bin/ir-instrument && echo /Users/svanegmond/src/helm/nonlinear/.venv/bin/ir-instrument || which ir-instrument)
+REF ?= ENG-561
+
+ir-instrument:
+	REF=$(REF) $(IR_INSTRUMENT) --ref $(REF)
 
 clean:
 	rm -rf bin demo_identity.db

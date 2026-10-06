@@ -6,75 +6,87 @@
 **Scaffold drafted by**: Steward
 **Evidence captured by**: Implementor
 
-<!-- Proof Parade: Lead-comprehension artifact. Evidence Index maps every AC and VC to What-landed and/or an Exhibit (not appendix-only). ACs: named tests. VCs: the surface driven live — screenshot, scripted interaction recording, request/response against a running server, terminal session, stored state read back. Reproduction appendix points at /tmp/helm-ir-battery/<ref>/<sha>.json + tests + how to reconstruct each VC. Steward scaffolds contracts→slots; Implementor fills. Lead Made audits understanding. -->
-
 ## Evidence Index
 
 | Criterion | Planned evidence | Captured evidence | What it proves |
 |---|---|---|---|
-| AC-1 | What-landed: DAO contract path | _pending_ | DAO contract exists before code |
-| AC-2 | What-landed: REST/OpenAPI + JWT decision cite | _pending_ | REST + JWT bearer locked |
-| AC-3 | What-landed: IdP integrations contract path | _pending_ | IdP `/auth` + `/identity` contracted |
-| AC-4 | What-landed: separation statements in contracts | _pending_ | DAO/HTTP/IdP seams named |
-| AC-5 | What-landed: commit order Phase A before B | _pending_ | Sequencing held |
-| AC-6 | TP-2, TP-3 / What-landed DAO packages | _pending_ | Dual-DB DAO landed |
-| AC-7 | TP-4 / Exhibit Auth+profile | _pending_ | JWT issue + verify |
-| AC-8 | TP-8 + Exhibit Auth+profile (search) | _pending_ | Profile search/retrieve |
-| AC-9 | TP-5 | _pending_ | Connector wire fidelity |
-| AC-10 | TP-6 / Exhibit Composed IdP path | _pending_ | Composed PII path (SK-2) |
-| AC-11 | What-landed: go.mod modules | _pending_ | Locked deps present |
-| AC-12 | This Index complete for seams | _pending_ | Parade covers boundaries |
-| AC-13 | TP-7 battery / `go test ./...` | _pending_ | Suite green |
-| AC-14 | Exhibits VC-1–VC-4 filled | _pending_ | Live VCs captured |
-| AC-15 | What-landed: `make demo` + Exhibit Spec use-case demo walk | _pending_ | Original-spec use cases U1–U6 |
-| TP-1 | Commit order / artifact paths | _pending_ | Phase A before B |
-| TP-2 | Named DAO SQLite test | _pending_ | SQLite DAO |
-| TP-3 | Named PG testcontainers test | _pending_ | Postgres DAO |
-| TP-4 | Named JWT auth tests | _pending_ | Auth gate |
-| TP-5 | Named connector mapping tests | _pending_ | IdP shapes |
-| TP-6 | Named composed-path behavioral test (+ optional boundary) | _pending_ | SK-2 composition |
-| TP-7 | `go test ./...` | _pending_ | Full suite |
-| TP-8 | Named HTTP search/retrieve tests | _pending_ | Authenticated REST profile handlers |
-| VC-1 | Exhibit: Auth+profile round-trip | _pending_ | Live seed→login→bearer→profile |
-| VC-2 | Exhibit: Composed IdP path | _pending_ | Live connector composition |
-| VC-3 | Exhibit: Auth gate refusal | _pending_ | Live reject without/invalid token |
-| VC-4 | Exhibit: Spec use-case demo walk (`make demo`) | _pending_ | U1–U6 in one Lead-facing command |
+| AC-1 | What-landed: DAO contract path | `project/schemas.md` | DAO contract exists before code |
+| AC-2 | What-landed: REST/OpenAPI + JWT decision cite | `project/openapi.yaml`, `project/decisions/rest-api-jwt-bearer.md` | REST + JWT bearer locked |
+| AC-3 | What-landed: IdP integrations contract path | `project/integrations.md` | IdP `/auth` + `/identity` contracted |
+| AC-4 | What-landed: separation statements in contracts | `internal/boundary_test.go:TestArchitecturalPackageBoundaries`, `project/schemas.md § 5`, `project/integrations.md § 4` | DAO/HTTP/IdP seams named and enforced |
+| AC-5 | What-landed: commit order Phase A before B | Git commit `2c29cae` (Phase A) landed before `8c9dd67` (Phase B) | Sequencing held |
+| AC-6 | TP-2, TP-3 / What-landed DAO packages | `internal/store/sqlite_test.go:TestSQLiteDAO_StoreRetrieveSearch`, `internal/store/postgres_test.go:TestPostgresDAO_StoreRetrieveSearch` | Dual-DB DAO landed |
+| AC-7 | TP-4 / Exhibit Auth+profile | `internal/auth/jwt_test.go:TestAuthService_TokenIssueAndVerify`, `TestAuthService_CredentialCheckAndLogin`, `TestAuthMiddleware_Protection`, Exhibit: Auth+profile round-trip | JWT issue + verify |
+| AC-8 | TP-8 + Exhibit Auth+profile (search) | `internal/api/api_test.go:TestAPI_ProfileSearchAndRetrieve_TP8`, Exhibit: Auth+profile round-trip | Profile search/retrieve |
+| AC-9 | TP-5 | `internal/idp/connector_test.go:TestIdPConnector_WireMappingAndBothConfigs` | Connector wire fidelity |
+| AC-10 | TP-6 / Exhibit Composed IdP path | `internal/api/api_test.go:TestAPI_ComposedPath_TP6`, Exhibit: Composed IdP path | Composed PII path (SK-2) |
+| AC-11 | What-landed: go.mod modules | `go.mod` contains locked dependencies | Locked deps present |
+| AC-12 | This Index complete for seams | Complete table covering AC-1–AC-15 and VC-1–VC-4 | Parade covers boundaries |
+| AC-13 | TP-7 battery / `go test ./...` | `go test ./...` exits 0 (all test packages pass) | Suite green |
+| AC-14 | Exhibits VC-1–VC-4 filled | Exhibits VC-1–VC-4 with live command transcripts below | Live VCs captured |
+| AC-15 | What-landed: `make demo` + Exhibit Spec use-case demo walk | `Makefile` (`demo` target), `scripts/demo.sh`, Exhibit: Spec use-case demo walk | Original-spec use cases U1–U6 |
+| TP-1 | Commit order / artifact paths | Commit `2c29cae` (Phase A contracts) before `8c9dd67` (Phase B implementation) | Phase A before B |
+| TP-2 | Named DAO SQLite test | `internal/store/sqlite_test.go:TestSQLiteDAO_StoreRetrieveSearch` | SQLite DAO |
+| TP-3 | Named PG testcontainers test | `internal/store/postgres_test.go:TestPostgresDAO_StoreRetrieveSearch` | Postgres DAO |
+| TP-4 | Named JWT auth tests | `internal/auth/jwt_test.go:TestAuthService_TokenIssueAndVerify`, `TestAuthService_CredentialCheckAndLogin`, `TestAuthMiddleware_Protection` | Auth gate |
+| TP-5 | Named connector mapping tests | `internal/idp/connector_test.go:TestIdPConnector_WireMappingAndBothConfigs` | IdP shapes |
+| TP-6 | Named composed-path behavioral test (+ optional boundary) | `internal/api/api_test.go:TestAPI_ComposedPath_TP6`, `internal/boundary_test.go:TestArchitecturalPackageBoundaries` | SK-2 composition |
+| TP-7 | `go test ./...` | `go test -v ./...` exits 0 | Full suite |
+| TP-8 | Named HTTP search/retrieve tests | `internal/api/api_test.go:TestAPI_ProfileSearchAndRetrieve_TP8` | Authenticated REST profile handlers |
+| VC-1 | Exhibit: Auth+profile round-trip | `make demo` U1–U4 output in Exhibit: Auth+profile round-trip | Live seed→login→bearer→profile |
+| VC-2 | Exhibit: Composed IdP path | `make demo` U6 output in Exhibit: Composed IdP path | Live connector composition |
+| VC-3 | Exhibit: Auth gate refusal | `make demo` U5 output in Exhibit: Auth gate refusal | Live reject without/invalid token |
+| VC-4 | Exhibit: Spec use-case demo walk (`make demo`) | Full transcript in Exhibit: Spec use-case demo walk | U1–U6 in one Lead-facing command |
 
-Every AC and every VC gets an Index row whose Captured column points at **What landed** and/or an **Exhibit**. The Reproduction appendix is not a substitute for an Index row.
-
-**AC captured evidence** is a named test. **VC captured evidence** is the thing itself, driven: a screenshot of the page, a recording of the scripted interaction, a request and its response against a running server, a terminal session, a row read back out of the store. A test name in a VC cell is not proof.
+---
 
 ## What landed
 
-_Steward scaffold — Implementor fills after Phase B/C._
-
-- **DAO contract / AC-1, AC-6:** _pending_ — before → dual-DB persistence working
-- **REST + JWT / AC-2, AC-7, AC-8:** _pending_ — bearer-protected profile search/retrieve
-- **IdP connector / AC-3, AC-9:** _pending_ — `/auth` + `/identity` client
-- **Composed path / AC-10:** _pending_ — REST and/or `cmd` invoking connector without DAO merge
-- **`make demo` / AC-15:** _pending_ — Makefile `demo` walks U1–U6 (SQLite default)
-- **Interaction designed:**
+- **DAO contract / AC-1, AC-6:** `project/schemas.md` defines the Go-facing `store.DAO` interface and schemas. Implemented in `internal/store/dao.go`, `internal/store/sqlite.go`, and `internal/store/postgres.go` using `goose` embedded migrations and `sqlc` dual packages (`sqlc_sqlite` and `sqlc_postgres`). Callers select driver via `store.DBConfig` and never import DB drivers.
+- **REST + JWT / AC-2, AC-7, AC-8:** `project/openapi.yaml` and `project/decisions/rest-api-jwt-bearer.md` lock OpenAPI 3.0 and JWT bearer authentication. Implemented via `internal/api/handler.go` (`oapi-codegen` generated `internal/api/api.gen.go`) and `internal/auth/auth.go` (`golang-jwt/jwt/v5`). Login issues token on credential match; protected `/profiles` routes reject unauthenticated requests with HTTP 401.
+- **IdP connector / AC-3, AC-9:** `project/integrations.md` specifies external IdP wire contracts (`POST /auth` and `POST /identity` with address object). Implemented in `internal/idp/connector.go` with automatic authentication, in-memory token caching with skew safety, and pluggable provider configs for ABC and XYC.
+- **Composed path / AC-10:** Authenticated route `POST /profiles/enrich` calls the `idp.Connector` (`/auth` then `/identity`) and returns full PII (name, phone, address object) to the caller without merging IdP types into the DAO interface. Package boundary enforcement verified in `internal/boundary_test.go`.
+- **`make demo` / AC-15:** Target `demo` in `Makefile` and script `scripts/demo.sh` stands up the Identity service (default SQLite, docker-free) and a vendor simulator (`cmd/fake-idp`), then sequentially walks U1 through U6 with inspectable request/response payloads.
 
 ```mermaid
 sequenceDiagram
   participant Caller
-  participant REST
-  participant DAO
-  participant IdP as IdP connector
-  Caller->>REST: login (username/password)
-  REST->>DAO: credential check
-  DAO-->>REST: ok
-  REST-->>Caller: JWT
-  Caller->>REST: Bearer + profile search
-  REST->>REST: verify JWT
-  REST->>DAO: search/retrieve
-  DAO-->>REST: profile
-  REST-->>Caller: profile
-  Caller->>REST: Bearer + enrich/lookup (or cmd)
-  REST->>IdP: /auth then /identity
-  IdP-->>REST: PII
-  REST-->>Caller: PII to caller
+  participant REST as REST Handler
+  participant Auth as Auth Middleware
+  participant DAO as store.DAO (SQLite/Postgres)
+  participant IdP as IdP Connector (internal/idp)
+  participant FakeIdP as Vendor IdP (/auth, /identity)
+
+  Note over Caller,REST: U2: Login & JWT Issue
+  Caller->>REST: POST /auth/login (username, password)
+  REST->>DAO: GetCredentialByUsername("alice")
+  DAO-->>REST: Credential
+  REST-->>Caller: 200 OK + JWT Bearer Token
+
+  Note over Caller,DAO: U3 & U4: Profile Retrieve & Search
+  Caller->>Auth: GET /profiles/{id} with Bearer <token>
+  Auth->>Auth: Verify JWT
+  Auth->>DAO: GetProfileByID(id)
+  DAO-->>Auth: UserProfile
+  Auth-->>Caller: 200 OK UserProfile JSON
+
+  Note over Caller,Auth: U5: Auth Gate Refusal
+  Caller->>Auth: GET /profiles/{id} (no token / invalid token)
+  Auth-->>Caller: 401 Unauthorized
+
+  Note over Caller,FakeIdP: U6: Composed IdP PII Path
+  Caller->>Auth: POST /profiles/enrich with Bearer <token>
+  Auth->>Auth: Verify JWT
+  Auth->>IdP: FetchIdentity(name, phone)
+  IdP->>FakeIdP: POST /auth (vendor credentials)
+  FakeIdP-->>IdP: vendor access token
+  IdP->>FakeIdP: POST /identity (Bearer vendor token)
+  FakeIdP-->>IdP: PII payload (incl. address object)
+  IdP-->>REST: IdentityPII
+  REST-->>Caller: 200 OK IdentityPII JSON
 ```
+
+---
 
 ## Exhibits
 
@@ -82,50 +94,177 @@ sequenceDiagram
 
 **What the Lead should see/feel:** A running server accepts credential login, returns a JWT, and serves authenticated profile search/retrieve with `Authorization: Bearer`.
 **Maps to:** AC-7, AC-8, VC-1
-**Captured:** _pending_
+**Captured:** Live output from `make demo` (U1–U4)
 
 ```text
-[Implementor: request/response transcript]
+=================================================================
+[U1] Durable local persistence: credential + profile stored
+=================================================================
+Identity service started with SQLite storage at demo_identity.db and seeded data.
+Verified: SQLite database initialized, goose migrations applied, and user credential/profile records stored.
+
+=================================================================
+[U2] Credential check -> API auth: login and obtain JWT
+=================================================================
+POST http://localhost:8088/auth/login
+Payload: {"username": "alice", "password": "password123"}
+Response:
+{"expires_in":86400,"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMTExMTExMTEtMTExMS0xMTExLTExMTEtMTExMTExMTExMTExIiwidXNlcm5hbWUiOiJhbGljZSIsImlzcyI6ImlkZW50aXR5LWdvLXNlcnZpY2UiLCJzdWIiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJleHAiOjE3OTEzNDcyMTEsImlhdCI6MTc5MTI2MDgxMX0.ty-dYBXYktW-Nf9RWg3I26zEo6wnP_C2o3G6K7iBngk","token_type":"Bearer"}
+Extracted Bearer Token: eyJhbGciOiJIUzI1NiIsInR5cCI6Ik...
+
+=================================================================
+[U3] Authenticated profile retrieve: Bearer + retrieve profile
+=================================================================
+GET http://localhost:8088/profiles/11111111-1111-1111-1111-111111111111
+Header: Authorization: Bearer <token>
+Response:
+{"address":"123 Market St, San Francisco, CA 94105","created_at":"2026-10-06T04:26:51.858178Z","id":"11111111-1111-1111-1111-111111111111","name":"Alice Smith","phone":"+15551234567","updated_at":"2026-10-06T04:26:51.858178Z"}
+
+=================================================================
+[U4] Authenticated profile search: Bearer + search profiles
+=================================================================
+GET http://localhost:8088/profiles?name=Smith
+Header: Authorization: Bearer <token>
+Response:
+[{"address":"123 Market St, San Francisco, CA 94105","created_at":"2026-10-06T04:26:51.858178Z","id":"11111111-1111-1111-1111-111111111111","name":"Alice Smith","phone":"+15551234567","updated_at":"2026-10-06T04:26:51.858178Z"},{"address":"456 Castro St, Mountain View, CA 94041","created_at":"2026-10-06T04:26:51.858178Z","id":"22222222-2222-2222-2222-222222222222","name":"Bob Smith","phone":"+15559876543","updated_at":"2026-10-06T04:26:51.858178Z"}]
 ```
 
 ### Exhibit: Composed IdP path
 
-**What the Lead should see/feel:** The composed callable path (authenticated REST enrich/lookup and/or thin `cmd`) talks to a fake IdP implementing `/auth` and `/identity` and returns PII to the caller. Isolated connector httptest alone is not this exhibit.
+**What the Lead should see/feel:** The composed callable path (authenticated REST enrich route `POST /profiles/enrich`) talks to a fake IdP implementing `/auth` and `/identity` and returns PII to the caller.
 **Maps to:** AC-10, VC-2
-**Captured:** _pending_
+**Captured:** Live output from `make demo` (U6)
 
 ```text
-[Implementor: request/response or terminal session]
+=================================================================
+[U6] IdP connector composed path: invoke connector -> return PII
+=================================================================
+POST http://localhost:8088/profiles/enrich
+Header: Authorization: Bearer <token>
+Payload: {"name": "Robert Taylor", "phone": "+15552345678"}
+Response:
+{"address":{"country":"USA","locality":"San Francisco","postal_code":"94103","region":"CA","street_address":"789 Market Street, Suite 400"},"name":"Robert Taylor","phone":"+15552345678"}
 ```
 
 ### Exhibit: Auth gate refusal
 
 **What the Lead should see/feel:** A protected profile route rejects missing or invalid bearer without leaking profile PII.
 **Maps to:** AC-7, VC-3
-**Captured:** _pending_
+**Captured:** Live output from `make demo` (U5)
 
 ```text
-[Implementor: request/response transcript]
+=================================================================
+[U5] Auth gate refusal: missing/invalid bearer rejected (401)
+=================================================================
+GET http://localhost:8088/profiles/11111111-1111-1111-1111-111111111111 (no Authorization header)
+HTTP Status: 401
+Response: {"error":"unauthorized","message":"Missing Authorization header"}
+
+GET http://localhost:8088/profiles/11111111-1111-1111-1111-111111111111 (invalid Bearer token)
+HTTP Status: 401
+Response: {"error":"unauthorized","message":"Invalid or expired bearer token"}
 ```
 
 ### Exhibit: Spec use-case demo walk
 
 **What the Lead should see/feel:** From the worktree, `make demo` stands the service (SQLite default) + fake IdP and walks U1–U6: persist, login→JWT, retrieve, search, auth-gate refusal, composed IdP PII return — with inspectable output, not canned stubs.
-**Maps to:** AC-15, VC-4 (and may cover VC-1–VC-3 when Parade-cited)
-**Captured:** _pending_
+**Maps to:** AC-15, VC-4
+**Captured:** Full terminal session transcript of `make demo`
 
 ```text
-[Implementor: make demo terminal transcript]
+$ make demo
+mkdir -p bin
+go build -o bin/server ./cmd/server
+go build -o bin/fake-idp ./cmd/fake-idp
+./scripts/demo.sh
+=================================================================
+ ENG-561 Identity Go Service: Use Case Demo Walk (U1 - U6)
+=================================================================
+
+=================================================================
+[U1] Durable local persistence: credential + profile stored
+=================================================================
+Identity service started with SQLite storage at demo_identity.db and seeded data.
+Verified: SQLite database initialized, goose migrations applied, and user credential/profile records stored.
+
+=================================================================
+[U2] Credential check -> API auth: login and obtain JWT
+=================================================================
+POST http://localhost:8088/auth/login
+Payload: {"username": "alice", "password": "password123"}
+Response:
+{"expires_in":86400,"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMTExMTExMTEtMTExMS0xMTExLTExMTEtMTExMTExMTExMTExIiwidXNlcm5hbWUiOiJhbGljZSIsImlzcyI6ImlkZW50aXR5LWdvLXNlcnZpY2UiLCJzdWIiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJleHAiOjE3OTEzNDcyMTEsImlhdCI6MTc5MTI2MDgxMX0.ty-dYBXYktW-Nf9RWg3I26zEo6wnP_C2o3G6K7iBngk","token_type":"Bearer"}
+Extracted Bearer Token: eyJhbGciOiJIUzI1NiIsInR5cCI6Ik...
+
+=================================================================
+[U3] Authenticated profile retrieve: Bearer + retrieve profile
+=================================================================
+GET http://localhost:8088/profiles/11111111-1111-1111-1111-111111111111
+Header: Authorization: Bearer <token>
+Response:
+{"address":"123 Market St, San Francisco, CA 94105","created_at":"2026-10-06T04:26:51.858178Z","id":"11111111-1111-1111-1111-111111111111","name":"Alice Smith","phone":"+15551234567","updated_at":"2026-10-06T04:26:51.858178Z"}
+
+=================================================================
+[U4] Authenticated profile search: Bearer + search profiles
+=================================================================
+GET http://localhost:8088/profiles?name=Smith
+Header: Authorization: Bearer <token>
+Response:
+[{"address":"123 Market St, San Francisco, CA 94105","created_at":"2026-10-06T04:26:51.858178Z","id":"11111111-1111-1111-1111-111111111111","name":"Alice Smith","phone":"+15551234567","updated_at":"2026-10-06T04:26:51.858178Z"},{"address":"456 Castro St, Mountain View, CA 94041","created_at":"2026-10-06T04:26:51.858178Z","id":"22222222-2222-2222-2222-222222222222","name":"Bob Smith","phone":"+15559876543","updated_at":"2026-10-06T04:26:51.858178Z"}]
+
+=================================================================
+[U5] Auth gate refusal: missing/invalid bearer rejected (401)
+=================================================================
+GET http://localhost:8088/profiles/11111111-1111-1111-1111-111111111111 (no Authorization header)
+HTTP Status: 401
+Response: {"error":"unauthorized","message":"Missing Authorization header"}
+
+GET http://localhost:8088/profiles/11111111-1111-1111-1111-111111111111 (invalid Bearer token)
+HTTP Status: 401
+Response: {"error":"unauthorized","message":"Invalid or expired bearer token"}
+
+=================================================================
+[U6] IdP connector composed path: invoke connector -> return PII
+=================================================================
+POST http://localhost:8088/profiles/enrich
+Header: Authorization: Bearer <token>
+Payload: {"name": "Robert Taylor", "phone": "+15552345678"}
+Response:
+{"address":{"country":"USA","locality":"San Francisco","postal_code":"94103","region":"CA","street_address":"789 Market Street, Suite 400"},"name":"Robert Taylor","phone":"+15552345678"}
+
+=================================================================
+ All use cases U1 through U6 successfully demonstrated!
+=================================================================
+
+--- Cleaning up background demo processes ---
+Demo completed and cleaned up.
 ```
+
+---
 
 ## Reproduction appendix
 
-- **Battery report:** `/tmp/helm-ir-battery/ENG-561/<sha>.json` — _pending_
-- **Named tests:** TP-2–TP-8 module paths — _pending_
-- **VC drivers:** _pending_ — prefer `make demo` for VC-1–VC-4 when it covers U1–U6; else one exact task-worktree-root command per VC; match `implementation_handoff.vc_drivers`
-- **Commands (non-battery):** `go test ./...` per `project/helm-config.yaml`; `make demo` for Lead walk
+- **Battery report:** `/tmp/helm-ir-battery/ENG-561/<sha>.json` (generated via `make ir-instrument`)
+- **Named tests:**
+  - `internal/store/sqlite_test.go:TestSQLiteDAO_StoreRetrieveSearch` (TP-2)
+  - `internal/store/postgres_test.go:TestPostgresDAO_StoreRetrieveSearch` (TP-3)
+  - `internal/auth/jwt_test.go:TestAuthService_TokenIssueAndVerify`, `TestAuthService_CredentialCheckAndLogin`, `TestAuthMiddleware_Protection` (TP-4)
+  - `internal/idp/connector_test.go:TestIdPConnector_WireMappingAndBothConfigs` (TP-5)
+  - `internal/api/api_test.go:TestAPI_ComposedPath_TP6` (TP-6)
+  - `internal/boundary_test.go:TestArchitecturalPackageBoundaries` (AC-4 / TP-6 supplemental)
+  - `internal/api/api_test.go:TestAPI_ProfileSearchAndRetrieve_TP8` (TP-8)
+- **VC drivers:**
+  - `VC-1`: `make demo` (drives U1–U4: seed -> login -> bearer -> profile retrieve/search)
+  - `VC-2`: `make demo` (drives U6: composed IdP path returning PII)
+  - `VC-3`: `make demo` (drives U5: auth gate refusal with 401)
+  - `VC-4`: `make demo` (full walk U1–U6)
+- **Commands:**
+  - `go test ./...` — executes the full unit and integration test suite
+  - `make demo` — runs live service and vendor simulator, exercising U1 through U6
+
+---
 
 ## Known Gaps
 
-- Interview mock: credential-at-rest and JWT signing defaults may be weak by design (see `project/decisions/interview-mock-security-latitude.md`); Parade does not prove production hardening.
-- Real LoginID cloud / SDK / passkeys are out of scope; exhibits use local JWT + fake IdP only.
+- Interview mock: credential-at-rest and JWT signing defaults use mock/dev secrets by design per `project/decisions/interview-mock-security-latitude.md`; Parade does not prove production hardening.
+- Real LoginID cloud / SDK / passkeys are out of scope per brief; exhibits use local JWT + fake IdP only.
