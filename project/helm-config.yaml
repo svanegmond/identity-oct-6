@@ -1,0 +1,35 @@
+# Mechanical workspace contract — parsed fail-closed by Nonlinear and IR.
+# Identity prose stays in helm-local.mdc.
+
+tracker:
+  team: ENG
+  project: Interview
+
+paths:
+  artifact_dir: project/
+  meta_workspace_root: "" # optional; home-relative values may use ~/
+  spike: "" # optional spike directory
+  hoard: "" # optional hoard directory
+
+instrument:
+  test_command: go test ./...
+  language: go
+  production_roots:
+    - cmd/
+    - internal/
+    - api/
+  test_roots:
+    - internal/
+  # named_suite: go test ./... -count=1
+
+model_routing:
+  # Flat string applies to all hosts. A map requires only the selected host.
+  # Supported hosts: cursor, pi, opencode, codex. Missing selected route refuses:
+  implementor: inherit
+  plan_reviewer: inherit
+  implementation_reviewer: inherit
+  skeptic: inherit
+  default_task: inherit
+
+# default_workflow: briefed # optional: briefed only; omit to stay freeform
+# default_land: pr # optional: main | pr | pushed (Briefed Validating→Done only)

@@ -1,0 +1,38 @@
+---
+description: Project identity — Identity workspace (Helm calibration)
+alwaysApply: false
+---
+
+# Project identity
+
+Calibrate during `/helm-init`. Mechanical contract fields (tracker, paths, instrument, model routing) live in `project/helm-config.yaml`.
+
+## Project
+
+- **Name:** Identity
+- **What:** Go service for user profiles and credentials with multi-database DAOs, a secured REST API, and connectors to third-party identity providers.
+- **Purpose:** Design separate contracts (DAO, API, IdP connectors), then implement against those contracts.
+- **Success:** Contracts land under `project/` taxonomy; working Go code stores and retrieves profiles/credentials (PostgreSQL or SQLite), exposes authenticated search/retrieve APIs, and can fetch PII from vendor IdPs via `/auth` and `/identity`.
+
+## Work style
+
+- **Brevity:** Prefer concise, decision-bearing prose over long narrative.
+- **Formatting:** Markdown under `project/`; contracts as separate artifacts (schemas, integrations, briefs).
+- **Autonomy:** Check with the Lead on meaningful choices; proceed on routine mechanical work.
+- **product_vision:** `true`
+
+## Release / git identity
+
+Greenfield repo. Prefer small, conventional commits when committing is requested. No release/versioning policy locked yet.
+
+## Calibration
+
+- **Ceremony band:** Minimal
+- **Artifact directory:** `project/`
+- **Tracker:** team `ENG`, project `Interview`
+- **Test command:** `go test ./...`
+- **Sibling reference:** consult `../agentic-eng-oct-5` for library ideas only; goals and contracts for this workspace own the design.
+
+## Locked invariants
+
+None yet. Record hard decisions under `project/decisions/` and cite them here when locked.
