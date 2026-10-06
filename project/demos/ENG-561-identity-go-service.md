@@ -25,7 +25,8 @@
 | AC-11 | What-landed: go.mod modules | _pending_ | Locked deps present |
 | AC-12 | This Index complete for seams | _pending_ | Parade covers boundaries |
 | AC-13 | TP-7 battery / `go test ./...` | _pending_ | Suite green |
-| AC-14 | Exhibits VC-1–VC-3 filled | _pending_ | Live VCs captured |
+| AC-14 | Exhibits VC-1–VC-4 filled | _pending_ | Live VCs captured |
+| AC-15 | What-landed: `make demo` + Exhibit Spec use-case demo walk | _pending_ | Original-spec use cases U1–U6 |
 | TP-1 | Commit order / artifact paths | _pending_ | Phase A before B |
 | TP-2 | Named DAO SQLite test | _pending_ | SQLite DAO |
 | TP-3 | Named PG testcontainers test | _pending_ | Postgres DAO |
@@ -37,6 +38,7 @@
 | VC-1 | Exhibit: Auth+profile round-trip | _pending_ | Live seed→login→bearer→profile |
 | VC-2 | Exhibit: Composed IdP path | _pending_ | Live connector composition |
 | VC-3 | Exhibit: Auth gate refusal | _pending_ | Live reject without/invalid token |
+| VC-4 | Exhibit: Spec use-case demo walk (`make demo`) | _pending_ | U1–U6 in one Lead-facing command |
 
 Every AC and every VC gets an Index row whose Captured column points at **What landed** and/or an **Exhibit**. The Reproduction appendix is not a substitute for an Index row.
 
@@ -50,6 +52,7 @@ _Steward scaffold — Implementor fills after Phase B/C._
 - **REST + JWT / AC-2, AC-7, AC-8:** _pending_ — bearer-protected profile search/retrieve
 - **IdP connector / AC-3, AC-9:** _pending_ — `/auth` + `/identity` client
 - **Composed path / AC-10:** _pending_ — REST and/or `cmd` invoking connector without DAO merge
+- **`make demo` / AC-15:** _pending_ — Makefile `demo` walks U1–U6 (SQLite default)
 - **Interaction designed:**
 
 ```mermaid
@@ -70,7 +73,7 @@ sequenceDiagram
   Caller->>REST: Bearer + enrich/lookup (or cmd)
   REST->>IdP: /auth then /identity
   IdP-->>REST: PII
-  REST-->>Caller: refreshed PII
+  REST-->>Caller: PII to caller
 ```
 
 ## Exhibits
@@ -87,7 +90,7 @@ sequenceDiagram
 
 ### Exhibit: Composed IdP path
 
-**What the Lead should see/feel:** The composed callable path (authenticated REST enrich/lookup and/or thin `cmd`) talks to a fake IdP implementing `/auth` and `/identity` and returns/refreshes PII. Isolated connector httptest alone is not this exhibit.
+**What the Lead should see/feel:** The composed callable path (authenticated REST enrich/lookup and/or thin `cmd`) talks to a fake IdP implementing `/auth` and `/identity` and returns PII to the caller. Isolated connector httptest alone is not this exhibit.
 **Maps to:** AC-10, VC-2
 **Captured:** _pending_
 
@@ -105,12 +108,22 @@ sequenceDiagram
 [Implementor: request/response transcript]
 ```
 
+### Exhibit: Spec use-case demo walk
+
+**What the Lead should see/feel:** From the worktree, `make demo` stands the service (SQLite default) + fake IdP and walks U1–U6: persist, login→JWT, retrieve, search, auth-gate refusal, composed IdP PII return — with inspectable output, not canned stubs.
+**Maps to:** AC-15, VC-4 (and may cover VC-1–VC-3 when Parade-cited)
+**Captured:** _pending_
+
+```text
+[Implementor: make demo terminal transcript]
+```
+
 ## Reproduction appendix
 
 - **Battery report:** `/tmp/helm-ir-battery/ENG-561/<sha>.json` — _pending_
-- **Named tests:** TP-2–TP-7 module paths — _pending_
-- **VC drivers:** _pending_ — one exact task-worktree-root command per VC-1–VC-3; match `implementation_handoff.vc_drivers`
-- **Commands (non-battery):** `go test ./...` per `project/helm-config.yaml`
+- **Named tests:** TP-2–TP-8 module paths — _pending_
+- **VC drivers:** _pending_ — prefer `make demo` for VC-1–VC-4 when it covers U1–U6; else one exact task-worktree-root command per VC; match `implementation_handoff.vc_drivers`
+- **Commands (non-battery):** `go test ./...` per `project/helm-config.yaml`; `make demo` for Lead walk
 
 ## Known Gaps
 

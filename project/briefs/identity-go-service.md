@@ -47,7 +47,7 @@ After this phase, a Go service implements the accepted contracts: DAO adapters f
 
 ### Phase C — Prove
 
-After this phase, `go test ./...` is green with named tests covering DAO on **both** PostgreSQL and SQLite backends (TP-2 + TP-3; no one-backend dialect-seam escape), auth gate, connector mapping, authenticated HTTP search/retrieve (TP-8), and the composed IdP path (behavioral TP-6). Proof Parade exhibits live request/response (or terminal) evidence for the VCs below.
+After this phase, `go test ./...` is green with named tests covering DAO on **both** PostgreSQL and SQLite backends (TP-2 + TP-3; no one-backend dialect-seam escape), auth gate, connector mapping, authenticated HTTP search/retrieve (TP-8), and the composed IdP path (behavioral TP-6). A **`make demo`** target (or equivalent Make entrypoint) runs an end-to-end walk of the original-spec use cases below and leaves a capture suitable for the Parade. Proof Parade exhibits live request/response (or terminal) evidence for the VCs below.
 
 ## Seams
 
@@ -78,6 +78,7 @@ After this phase, `go test ./...` is green with named tests covering DAO on **bo
   - SK-1: Plan Review + Intend = Lead acceptance of contract requirements; sequenced A→B→C in one Implementor cycle OK; Phase A before Phase B code.
   - SK-2: Composed callable IdP path required; returns PII to caller; persist-via-DAO after connector is latitude; AC+VC beyond isolated httptest.
   - VC-1 credential bootstrap: DAO seed/fixture by default; REST register only if Phase A contracts it.
+  - `make demo` required: walks U1–U6 (persist, login/JWT, retrieve, search, auth gate, composed IdP); default SQLite docker-free.
   - SK-3: Credential-at-rest and JWT signing-key defaults are latitude; argon2id / strong keys not hard ACs.
   - LoginID **in**: local JWT issue+verify before protected routes; separate auth vs identity/PII; optional JWT scopes OK. **Out**: passkeys/FIDO2, LoginID mgmt/grant APIs, transaction confirmation, real LoginID SDK.
   - Profile search remains in scope.
@@ -97,9 +98,21 @@ After this phase, `go test ./...` is green with named tests covering DAO on **bo
 ## Demonstration Plan
 
 - **Proof Parade path:** `project/demos/ENG-561-identity-go-service.md`
-- [ ] **VC-1** Stand the HTTP server (SQLite or Postgres). Bootstrap a credential via **DAO seed/fixture** (or a REST register route **only if** Phase A contracts one — not required otherwise), obtain JWT via login, call authenticated profile search/retrieve with `Authorization: Bearer <token>`; capture request/response. Exhibit: Auth+profile round-trip.
-- [ ] **VC-2** Drive the composed IdP path (authenticated REST enrich/lookup and/or thin `cmd`) against a fake/stub IdP implementing `/auth` + `/identity`; show PII **returned to the caller** without DAO importing IdP packages. Persist-after-connector is latitude, not this VC. Capture request/response or terminal session. Exhibit: Composed IdP path. (Isolated connector httptest alone does not satisfy this VC.)
-- [ ] **VC-3** Show unauthenticated (or invalid-token) call to a protected profile route is rejected; capture status/body. Exhibit: Auth gate refusal.
+- **`make demo` (required):** Makefile target `demo` that stands the service (default **SQLite**, docker-free) plus any needed fake IdP, then exercises these original-spec use cases in one walk. Capture goes to terminal transcript and/or files cited from the Parade. Optional `DB=postgres` (or similar) is Allowed latitude, not required for VC-4.
+
+| Step | Use case (from original prompt) | Expected observable |
+|------|----------------------------------|---------------------|
+| U1 | Durable local persistence | Credential + profile stored (seed/store); readable after start |
+| U2 | Credential check → API auth | Login succeeds; JWT issued |
+| U3 | Authenticated profile retrieve | Bearer + retrieve returns contracted profile |
+| U4 | Authenticated profile search | Bearer + search returns matching profile(s) |
+| U5 | Auth gate | Missing/invalid bearer rejected; no profile payload |
+| U6 | IdP connector composed path | Caller hits composed path; fake IdP `/auth` then `/identity`; PII (incl. address fields) **returned to caller** |
+
+- [ ] **VC-1** Stand the HTTP server (SQLite or Postgres). Bootstrap a credential via **DAO seed/fixture** (or a REST register route **only if** Phase A contracts one — not required otherwise), obtain JWT via login, call authenticated profile search/retrieve with `Authorization: Bearer <token>`; capture request/response. Exhibit: Auth+profile round-trip. (Satisfied by `make demo` U1–U4 when that transcript is Parade-cited.)
+- [ ] **VC-2** Drive the composed IdP path (authenticated REST enrich/lookup and/or thin `cmd`) against a fake/stub IdP implementing `/auth` + `/identity`; show PII **returned to the caller** without DAO importing IdP packages. Persist-after-connector is latitude, not this VC. Capture request/response or terminal session. Exhibit: Composed IdP path. (Satisfied by `make demo` U6 when Parade-cited; isolated connector httptest alone does not satisfy.)
+- [ ] **VC-3** Show unauthenticated (or invalid-token) call to a protected profile route is rejected; capture status/body. Exhibit: Auth gate refusal. (Satisfied by `make demo` U5 when Parade-cited.)
+- [ ] **VC-4** Shape: single-surface (integration-shaped if fake IdP is a separate process). Medium: terminal session from **`make demo`**. Lead sees one command walk U1–U6 in order (or clearly labeled steps) with inspectable request/response or equivalent output. Fake-green resistance: a demo that only prints canned text without driving the running service/fake IdP fails. → Parade Exhibit: Spec use-case demo walk.
 
 ## Test Plan
 
@@ -135,18 +148,20 @@ After this phase, `go test ./...` is green with named tests covering DAO on **bo
 - [ ] **AC-9** IdP connector implements `/auth` and `/identity` against the Phase A contract; ABC and XYC differ by config/base URL unless Phase A documents a justified fork.
 - [ ] **AC-10** A composed callable path (authenticated REST enrich/lookup route and/or thin `cmd`) invokes the IdP connector and **returns PII to the caller** without merging IdP into the DAO interface (SK-2). Persisting that PII via the DAO after the connector call is **Allowed latitude**, not required to meet AC-10 or VC-2.
 - [ ] **AC-11** Locked Dependency / Technology Decisions modules are present in `go.mod` (argon2id optional only).
-- [ ] **AC-12** Proof Parade demonstrates each new boundary/seam with inspectable evidence (Evidence Index rows for AC-6–AC-10 and VC-1–VC-3).
+- [ ] **AC-12** Proof Parade demonstrates each new boundary/seam with inspectable evidence (Evidence Index rows for AC-6–AC-11, AC-15, and VC-1–VC-4).
+- [ ] **AC-15** A Makefile target **`demo`** (`make demo`) stands the service (default SQLite, docker-free) and any needed fake IdP, then walks use cases **U1–U6** from the Demonstration Plan (durable store, login→JWT, authenticated retrieve, authenticated search, auth-gate refusal, composed IdP PII return). Demo drives the real running surfaces; canned stdout alone fails.
 
 ### Phase C
 
 - [ ] **AC-13** `go test ./...` passes; TP-2–TP-8 named tests exist and guard the contracts above.
-- [ ] **AC-14** VC-1–VC-3 evidence is captured in `project/demos/ENG-561-identity-go-service.md` (live surface, not test-name-as-VC-proof).
+- [ ] **AC-14** VC-1–VC-4 evidence is captured in `project/demos/ENG-561-identity-go-service.md` (live surface, not test-name-as-VC-proof). `make demo` transcript (or Parade-cited capture) may satisfy VC-1–VC-4 when it covers U1–U6.
 
 ## Validation Criteria
 
-- [ ] **VC-1** Shape: single-surface. Medium: request/response transcript against a running server. Lead sees credential bootstrap (DAO seed/fixture, or Phase-A-contracted register if present) → login → bearer → authenticated profile search/retrieve succeed. → Parade Exhibit: Auth+profile round-trip.
-- [ ] **VC-2** Shape: single-surface (integration-shaped if fake IdP is a separate process). Medium: request/response and/or terminal session. Lead sees composed path call IdP `/auth`+`/identity` and **return PII to the caller**; DAO remains free of IdP. Persist-after-connector is latitude, not this VC. Fake-green resistance: connector unit test alone must not satisfy this VC. → Parade Exhibit: Composed IdP path.
-- [ ] **VC-3** Shape: single-surface. Medium: request/response transcript. Lead sees protected profile route refuse missing/invalid bearer. → Parade Exhibit: Auth gate refusal.
+- [ ] **VC-1** Shape: single-surface. Medium: request/response transcript against a running server. Lead sees credential bootstrap (DAO seed/fixture, or Phase-A-contracted register if present) → login → bearer → authenticated profile search/retrieve succeed. → Parade Exhibit: Auth+profile round-trip. (`make demo` U1–U4 OK when Parade-cited.)
+- [ ] **VC-2** Shape: single-surface (integration-shaped if fake IdP is a separate process). Medium: request/response and/or terminal session. Lead sees composed path call IdP `/auth`+`/identity` and **return PII to the caller**; DAO remains free of IdP. Persist-after-connector is latitude, not this VC. Fake-green resistance: connector unit test alone must not satisfy this VC. → Parade Exhibit: Composed IdP path. (`make demo` U6 OK when Parade-cited.)
+- [ ] **VC-3** Shape: single-surface. Medium: request/response transcript. Lead sees protected profile route refuse missing/invalid bearer. → Parade Exhibit: Auth gate refusal. (`make demo` U5 OK when Parade-cited.)
+- [ ] **VC-4** Shape: single-surface (integration-shaped if fake IdP is a separate process). Medium: terminal session from **`make demo`**. Lead sees one command walk U1–U6 in order (or clearly labeled steps) with inspectable request/response or equivalent output. Fake-green resistance: canned text without driving running service/fake IdP fails. → Parade Exhibit: Spec use-case demo walk.
 
 ## Tracking
 
@@ -171,7 +186,9 @@ After this phase, `go test ./...` is green with named tests covering DAO on **bo
 - Optional JWT scopes claims if useful for discussion; not required for AC-7.
 - Exact package names under `internal/`, HTTP router wiring details, and whether the composed IdP path is REST-only, `cmd`-only, or both — provided AC-10 and VC-2 are met.
 - Whether to persist IdP-returned PII through the DAO after the composed call (optional; not required for AC-10/VC-2).
-- Optional REST register/signup route for credential bootstrap if Phase A contracts it; otherwise VC-1 uses DAO seed/fixture.
+- Optional REST register/signup route for credential bootstrap if Phase A contracts it; otherwise VC-1 / `make demo` U1 uses DAO seed/fixture.
+- Optional `make demo DB=postgres` (or similar); default SQLite docker-free path is what AC-15 / VC-4 require.
+- Script layout under `scripts/` vs inline Make recipe for the demo walk — provided `make demo` remains the Lead-facing entrypoint.
 - ABC vs XYC as two configs on one connector interface when wire shapes match.
 
 ## Error & Failure Map
