@@ -9,6 +9,7 @@ ref: ENG-561
 **SHA:** `45ad2eb60214505467a3d778b74764cb3c8817bc`  
 **Worktree:** `_worktrees/ENG-561` (`feat/ENG-561`)  
 **Parade (captures):** [ENG-561-identity-go-service.md](ENG-561-identity-go-service.md)  
+**Validating walk (original three items + live HTTP):** [ENG-561-validating-walk.md](ENG-561-validating-walk.md)  
 **Replay:** from worktree root, `make demo` (needs `sqlite3` on PATH for U1)
 
 Steward reading of landed code plus a live `make demo` at this SHA (not a paste of the Implementor Parade). HTTP bodies below are from that drive (`/tmp/eng561-validating-c3-demo.txt`).
