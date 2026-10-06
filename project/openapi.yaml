@@ -1,0 +1,334 @@
+openapi: 3.0.3
+info:
+  title: Identity Go Service API (Interview Discussion Object)
+  description: Authenticated REST API for profile search/retrieve and IdP composition.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+    description: Local development / test server
+
+paths:
+  /auth/login:
+    post:
+      summary: Authenticate credential and obtain JWT bearer token
+      operationId: login
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Successful authentication
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/register:
+    post:
+      summary: Register credential and bootstrap profile
+      operationId: register
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Created profile and credential
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Username conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /profiles:
+    get:
+      summary: Search user profiles
+      operationId: searchProfiles
+      tags:
+        - Profiles
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: name
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Substring match on profile name
+        - name: phone
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Substring match on phone number
+      responses:
+        '200':
+          description: List of matching profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserProfile'
+        '401':
+          description: Unauthorized (missing or invalid bearer token)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /profiles/{id}:
+    get:
+      summary: Retrieve a user profile by ID
+      operationId: getProfileByID
+      tags:
+        - Profiles
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique profile identifier
+      responses:
+        '200':
+          description: Profile found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '401':
+          description: Unauthorized (missing or invalid bearer token)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Profile not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /profiles/enrich:
+    post:
+      summary: Composed path invoking IdP connector and returning PII to caller
+      operationId: enrichProfile
+      tags:
+        - Profiles
+        - Integrations
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnrichRequest'
+      responses:
+        '200':
+          description: PII successfully retrieved from IdP and returned to caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityPII'
+        '401':
+          description: Unauthorized (missing or invalid local bearer token)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Upstream IdP failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT issued by /auth/login after credential verification
+
+  schemas:
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          example: "alice"
+        password:
+          type: string
+          example: "password123"
+
+    LoginResponse:
+      type: object
+      required:
+        - token
+        - token_type
+        - expires_in
+      properties:
+        token:
+          type: string
+          description: Signed JWT token
+        token_type:
+          type: string
+          example: "Bearer"
+        expires_in:
+          type: integer
+          description: Token validity duration in seconds
+          example: 3600
+
+    RegisterRequest:
+      type: object
+      required:
+        - username
+        - password
+        - name
+        - address
+        - phone
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        name:
+          type: string
+        address:
+          type: string
+        phone:
+          type: string
+
+    UserProfile:
+      type: object
+      required:
+        - id
+        - name
+        - address
+        - phone
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          example: "11111111-1111-1111-1111-111111111111"
+        name:
+          type: string
+          example: "Alice Smith"
+        address:
+          type: string
+          example: "123 Market St, San Francisco, CA"
+        phone:
+          type: string
+          example: "+15551234567"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    EnrichRequest:
+      type: object
+      required:
+        - name
+        - phone
+      properties:
+        name:
+          type: string
+          example: "Bob Jones"
+        phone:
+          type: string
+          example: "+15559876543"
+        provider:
+          type: string
+          description: "Target IdP provider name (e.g. ABC or XYC)"
+          default: "ABC"
+
+    Address:
+      type: object
+      required:
+        - street_address
+        - locality
+        - region
+        - postal_code
+        - country
+      properties:
+        street_address:
+          type: string
+          example: "456 Mission St"
+        locality:
+          type: string
+          example: "San Francisco"
+        region:
+          type: string
+          example: "CA"
+        postal_code:
+          type: string
+          example: "94105"
+        country:
+          type: string
+          example: "USA"
+
+    IdentityPII:
+      type: object
+      required:
+        - name
+        - phone
+        - address
+      properties:
+        name:
+          type: string
+          example: "Bob Jones"
+        phone:
+          type: string
+          example: "+15559876543"
+        address:
+          $ref: '#/components/schemas/Address'
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          example: "unauthorized"
+        message:
+          type: string
+          example: "Missing or invalid bearer token"
