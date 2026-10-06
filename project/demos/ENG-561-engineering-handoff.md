@@ -1,93 +1,129 @@
 ---
-description: "Steward Validating engineering handoff for ENG-561 at ac67a2d; nits listed as in-flight."
+description: "Steward Validating engineering handoff for ENG-561 at 45ad2eb."
 date: 2026-10-06
 ref: ENG-561
 ---
 
 # Engineering handoff: Identity Go service
 
-**SHA:** `ac67a2d18da13d4c791f3007af52ff51995a4728`  
+**SHA:** `45ad2eb60214505467a3d778b74764cb3c8817bc`  
 **Worktree:** `_worktrees/ENG-561` (`feat/ENG-561`)  
 **Parade (captures):** [ENG-561-identity-go-service.md](ENG-561-identity-go-service.md)  
-**Replay:** from worktree root, `make demo`
+**Replay:** from worktree root, `make demo` (needs `sqlite3` on PATH for U1)
 
-This is Steward's reading of the landed code and a live `make demo` drive (not a copy of the Implementor Parade). Two Validating nits are in-flight after this SHA: shared Bearer parse + quiet 401s, and a real U1 SQLite readback in `scripts/demo.sh`.
+Steward reading of landed code plus a live `make demo` at this SHA (not a paste of the Implementor Parade). HTTP bodies below are from that drive (`/tmp/eng561-validating-c3-demo.txt`).
 
 ## What this is
 
-A local Identity service for interview discussion. Callers log in against stored credentials, get an HS256 JWT, then search/retrieve profiles. A separate connector talks to a fake ABC/XYC-shaped IdP (`POST /auth`, `POST /identity`) and returns PII on `POST /profiles/enrich` without writing that PII into the DAO.
+A local Identity service for interview discussion. Callers log in against stored credentials, get an HS256 JWT, then search/retrieve profiles. **Enrich** means: POST name+phone, this service asks a fake vendor IdP, returns that PII. It does not write the vendor payload into SQLite/Postgres.
 
-It is not LoginID production: passwords may be stored as plaintext, JWT secret is a flag default, passkeys/FIDO2/SDK are out.
+Not LoginID production: plaintext-or-as-stored passwords, JWT secret is a flag default, no passkeys/SDK.
 
 ## Layout
 
 | Package | Role |
 |---------|------|
 | `internal/store` | DAO port + SQLite/Postgres adapters (goose + sqlc) |
-| `internal/auth` | Credential check, JWT issue/verify |
+| `internal/auth` | Credential check, JWT issue/verify, `AuthenticateBearer` |
 | `internal/idp` | HTTP client for vendor `/auth` + `/identity` |
 | `internal/api` | OpenAPI-generated handlers + `nethttp-middleware` validator |
 | `cmd/server` | Flags, `store.Open`, seed, listen |
 | `cmd/fake-idp` | Simulator used by `make demo` |
 
-Callers never pick a SQL dialect. `store.Open` switches on `DBConfig.Driver` (`sqlite` | `postgres`). Postgres `openPostgres` is a package-level func var assigned from `postgres.go` `init`.
+`store.Open` switches on `DBConfig.Driver`. Callers never import a dialect.
 
 ## Data model
 
-Two tables, same shape on both backends ([sqlite migration](../../internal/store/sqlite/migrations/00001_init.sql)):
+- `user_profiles`: `id`, `name`, **one-string** `address`, `phone`, timestamps
+- `user_credentials`: `id`, `user_id`, unique `username`, `method`, `password`, timestamps
 
-- `user_profiles`: `id`, `name`, `address` (single string on the DAO/REST retrieve path), `phone`, timestamps
-- `user_credentials`: `id`, `user_id`, `username` unique, `method`, `password`, timestamps
+IdP PII `address` is structured (`street_address`, `locality`, `region`, `postal_code`, `country`). Enrich keeps that shape in the HTTP response only.
 
-Observed: local profile `address` is one string. IdP PII `address` is structured (`street_address`, `locality`, `region`, `postal_code`, `country`). Enrich does not merge those shapes into the DAO.
+Seed: Alice `11111111-…` / `alice` / `password123`; Bob `22222222-…` for search.
 
-Seeded demo users (`cmd/server` `-seed`): Alice `11111111-…` / `alice` / `password123`; Bob `22222222-…` for search.
+## HTTP surface
 
-## HTTP surface (`project/openapi.yaml`)
-
-| Method | Path | Auth | Handler |
+| Method | Path | Auth | Meaning |
 |--------|------|------|---------|
-| POST | `/auth/login` | none | credential check → JWT |
+| POST | `/auth/login` | none | credential → JWT |
 | POST | `/auth/register` | none | create profile + credential |
-| GET | `/profiles` | Bearer | search by `name` / `phone` query |
+| GET | `/profiles` | Bearer | search `name` / `phone` |
 | GET | `/profiles/{id}` | Bearer | retrieve |
-| POST | `/profiles/enrich` | Bearer | IdP `FetchIdentity`; PII in response only |
+| POST | `/profiles/enrich` | Bearer | vendor lookup; no DAO write |
 
-Protected routes are those OpenAPI marks with `BearerAuth`. `NewRouter` wraps the generated handler with `middleware.OapiRequestValidatorWithOptions`. `AuthenticationFunc` parses `Authorization: Bearer`, calls `auth.Service.VerifyToken`, stashes claims on the request context.
+Live gate: OpenAPI `BearerAuth` → `AuthenticationFunc` → `auth.Service.AuthenticateBearer` (`internal/api/handler.go`). `Middleware` is gone.
 
-Login (observed from `make demo`):
+## Observed traffic (this SHA)
+
+U1 is not HTTP. Direct SQLite:
+
+```text
+SQLite profile row: 11111111-1111-1111-1111-111111111111|Alice Smith|+15551234567
+SQLite credential row: 11111111-1111-1111-1111-111111111111|alice|password
+```
+
+Login:
 
 ```http
-POST /auth/login
+POST /auth/login HTTP/1.1
+Host: localhost:8088
+Content-Type: application/json
+
 {"username":"alice","password":"password123"}
-
-→ 200 {"token":"<jwt>","token_type":"Bearer","expires_in":86400}
 ```
 
-Retrieve (observed):
-
 ```http
-GET /profiles/11111111-1111-1111-1111-111111111111
-Authorization: Bearer <jwt>
+HTTP/1.1 200 OK
+Content-Type: application/json
 
-→ 200 {"id":"11111111-…","name":"Alice Smith","address":"123 Market St, San Francisco, CA 94105","phone":"+15551234567",…}
+{"expires_in":86400,"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMTExMTExMTEtMTExMS0xMTExLTExMTEtMTExMTExMTExMTExIiwidXNlcm5hbWUiOiJhbGljZSIsImlzcyI6ImlkZW50aXR5LWdvLXNlcnZpY2UiLCJzdWIiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJleHAiOjE3OTEzNTg5MTMsImlhdCI6MTc5MTI3MjUxM30.zkSaS7YQ8SwZzWCdA3jJB871n3I4janBDqzuFpwlWss","token_type":"Bearer"}
 ```
 
-Search `?name=Smith` returns Alice and Bob. Missing or garbage Bearer on GET `/profiles/{id}` returns **401** with `error: unauthorized`. At this SHA the invalid-token body still wraps jwt library text (`token is malformed: …`).
-
-Enrich (observed; fake IdP process):
+Retrieve:
 
 ```http
-POST /profiles/enrich
-Authorization: Bearer <jwt>
+GET /profiles/11111111-1111-1111-1111-111111111111 HTTP/1.1
+Host: localhost:8088
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMTExMTExMTEtMTExMS0xMTExLTExMTEtMTExMTExMTExMTExIiwidXNlcm5hbWUiOiJhbGljZSIsImlzcyI6ImlkZW50aXR5LWdvLXNlcnZpY2UiLCJzdWIiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJleHAiOjE3OTEzNTg5MTMsImlhdCI6MTc5MTI3MjUxM30.zkSaS7YQ8SwZzWCdA3jJB871n3I4janBDqzuFpwlWss
+```
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"address":"123 Market St, San Francisco, CA 94105","created_at":"2026-10-06T07:41:53.628299Z","id":"11111111-1111-1111-1111-111111111111","name":"Alice Smith","phone":"+15551234567","updated_at":"2026-10-06T07:41:53.628299Z"}
+```
+
+Search `GET /profiles?name=Smith` with the same Bearer returns Alice and Bob (full array in Parade / demo transcript).
+
+Auth gate, no header / `Bearer bad-invalid-token`:
+
+```http
+HTTP/1.1 401 Unauthorized
+Content-Type: application/json
+
+{"error":"unauthorized","message":"Unauthorized: missing or invalid bearer token"}
+```
+
+No jwt library parse text in that body at this SHA.
+
+Enrich (vendor lookup, not a local upsert):
+
+```http
+POST /profiles/enrich HTTP/1.1
+Host: localhost:8088
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMTExMTExMTEtMTExMS0xMTExLTExMTEtMTExMTExMTExMTExIiwidXNlcm5hbWUiOiJhbGljZSIsImlzcyI6ImlkZW50aXR5LWdvLXNlcnZpY2UiLCJzdWIiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJleHAiOjE3OTEzNTg5MTMsImlhdCI6MTc5MTI3MjUxM30.zkSaS7YQ8SwZzWCdA3jJB871n3I4janBDqzuFpwlWss
+Content-Type: application/json
+
 {"name":"Robert Taylor","phone":"+15552345678"}
-
-→ 200
-{"name":"Robert Taylor","phone":"+15552345678",
- "address":{"street_address":"789 Market Street, Suite 400","locality":"San Francisco","region":"CA","postal_code":"94103","country":"USA"}}
 ```
 
-`EnrichProfile` calls `idpConn.FetchIdentity` only. No `CreateProfile` / update on that path.
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"address":{"country":"USA","locality":"San Francisco","postal_code":"94103","region":"CA","street_address":"789 Market Street, Suite 400"},"name":"Robert Taylor","phone":"+15552345678"}
+```
 
 ## Request flow
 
@@ -95,37 +131,33 @@ Authorization: Bearer <jwt>
 sequenceDiagram
   participant C as Caller
   participant API as api.NewRouter
-  participant Auth as auth.Service
+  participant Auth as AuthenticateBearer
   participant DAO as store.DAO
   participant IdP as idp.Client
-  participant Fake as fake-idp
   C->>API: POST /auth/login
-  API->>Auth: Login
-  Auth->>DAO: GetCredentialByUsername
-  Auth-->>C: JWT HS256
-  C->>API: GET /profiles… + Bearer
-  API->>Auth: VerifyToken
-  API->>DAO: GetProfileByID / SearchProfiles
-  DAO-->>C: profile JSON
-  C->>API: POST /profiles/enrich + Bearer
+  API->>DAO: GetCredentialByUsername
+  API-->>C: HS256 JWT
+  C->>API: GET /profiles + Bearer
+  API->>Auth: AuthenticateBearer
+  API->>DAO: search/retrieve
+  C->>API: POST /profiles/enrich
   API->>IdP: FetchIdentity
-  IdP->>Fake: POST /auth then /identity
-  Fake-->>C: structured PII
+  IdP-->>C: structured PII, no DAO write
 ```
 
-## Limits (current SHA)
+## Limits
 
-- JWT secret default: `dev-jwt-secret-interview-mock-long-enough` (`cmd/server/main.go`). Passwords compared as stored strings.
-- `auth.Service.Middleware` is unused by `NewRouter`; live gate is OpenAPI middleware. `TestAuthMiddleware_Protection` still hits the dead path.
-- `scripts/demo.sh` U1 prints a canned “Verified: … migrations applied” line; U3/U4 prove rows via HTTP, not a direct SQLite query.
-- Register exists on the API even though VC-1 bootstrap is seed/fixture.
+- JWT secret default `dev-jwt-secret-interview-mock-long-enough`. Passwords compared as stored.
+- `make demo` U1 shells out to `sqlite3`; host without it fails closed (`command not found`), not a silent green.
+- `AuthenticateRequest(*http.Request)` wraps `AuthenticateBearer` and has no production caller (leftover helper).
+- Register exists; VC-1 bootstrap is seed + SQLite readback.
 
 ## Replay
 
 ```bash
 cd _worktrees/ENG-561
-make demo          # SQLite + fake IdP, U1–U6
-go test ./...      # includes Postgres testcontainers
+make demo
+go test ./...
 ```
 
-Instrument stamp: `/tmp/helm-ir-battery/ENG-561/ac67a2d18da13d4c791f3007af52ff51995a4728.json`
+Instrument: `/tmp/helm-ir-battery/ENG-561/45ad2eb60214505467a3d778b74764cb3c8817bc.json`
