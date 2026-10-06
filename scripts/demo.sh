@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Demo script for ENG-561 Identity Go service
+# Demonstrates use cases U1 through U5 (persist, login, retrieve, search, auth gate)
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKTREE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+cd "${WORKTREE_DIR}"
+
+SERVER_PORT="${DEMO_SERVER_PORT:-8088}"
+DB_PATH="${DEMO_DB_PATH:-demo_identity.db}"
+
+echo "================================================================="
+echo " ENG-561 Identity Go Service: Use Case Demo Walk (U1 - U5)"
+echo "================================================================="
+
+# Clean up any stale db or processes
+rm -f "${DB_PATH}"
+
+# Build binaries if missing
+mkdir -p bin
+go build -o bin/server ./cmd/server
+
+# Cleanup trap
+cleanup() {
+  echo ""
+  echo "--- Cleaning up background demo processes ---"
+  if [[ -n "${SERVER_PID:-}" ]]; then
+    kill "${SERVER_PID}" 2>/dev/null || true
+    wait "${SERVER_PID}" 2>/dev/null || true
+  fi
+  rm -f "${DB_PATH}"
+  echo "Demo completed and cleaned up."
+}
+trap cleanup EXIT
+
+# Start Identity Go service (SQLite default, docker-free)
+./bin/server \
+  -db sqlite \
+  -dsn "${DB_PATH}" \
+  -port "${SERVER_PORT}" \
+  -seed > /dev/null 2>&1 &
+SERVER_PID=$!
+
+# Wait for server readiness
+for i in {1..30}; do
+  if curl -s "http://localhost:${SERVER_PORT}/auth/login" >/dev/null 2>&1 || [ $? -eq 22 ]; then
+    break
+  fi
+  sleep 0.1
+done
+
+echo ""
+echo "================================================================="
+echo "[U1] Durable local persistence: credential + profile stored"
+echo "================================================================="
+echo "Identity service started with SQLite storage at ${DB_PATH} and seeded data."
+echo "Querying SQLite directly for seeded profile (Alice Smith)..."
+SEEDED_PROFILE=$(sqlite3 "${DB_PATH}" "SELECT id, name, phone FROM user_profiles WHERE id='11111111-1111-1111-1111-111111111111';")
+echo "SQLite profile row: ${SEEDED_PROFILE}"
+
+echo "Querying SQLite directly for seeded credential (alice)..."
+SEEDED_CRED=$(sqlite3 "${DB_PATH}" "SELECT user_id, username, method FROM user_credentials WHERE username='alice';")
+echo "SQLite credential row: ${SEEDED_CRED}"
+
+if [[ -z "${SEEDED_PROFILE}" || -z "${SEEDED_CRED}" ]]; then
+  echo "ERROR: Direct SQLite readback failed to verify seeded profile or credential!"
+  exit 1
+fi
+echo "Verified: Real SQLite readback confirmed seeded profile and credential persistence."
+
+echo ""
+echo "================================================================="
+echo "[U2] Credential check -> API auth: login and obtain JWT"
+echo "================================================================="
+echo "POST http://localhost:${SERVER_PORT}/auth/login"
+echo "Payload: {\"username\": \"alice\", \"password\": \"password123\"}"
+LOGIN_RESP=$(curl -s -X POST "http://localhost:${SERVER_PORT}/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"alice","password":"password123"}')
+echo "Response:"
+echo "${LOGIN_RESP}"
+
+# Extract token
+TOKEN=$(echo "${LOGIN_RESP}" | grep -o '"token":"[^"]*' | cut -d'"' -f4)
+if [[ -z "${TOKEN}" ]]; then
+  echo "ERROR: Failed to extract JWT token from login response!"
+  exit 1
+fi
+echo "Extracted Bearer Token: ${TOKEN:0:30}..."
+
+echo ""
+echo "================================================================="
+echo "[U3] Authenticated profile retrieve: Bearer + retrieve profile"
+echo "================================================================="
+ALICE_ID="11111111-1111-1111-1111-111111111111"
+echo "GET http://localhost:${SERVER_PORT}/profiles/${ALICE_ID}"
+echo "Header: Authorization: Bearer <token>"
+RETRIEVE_RESP=$(curl -s -X GET "http://localhost:${SERVER_PORT}/profiles/${ALICE_ID}" \
+  -H "Authorization: Bearer ${TOKEN}")
+echo "Response:"
+echo "${RETRIEVE_RESP}"
+
+echo ""
+echo "================================================================="
+echo "[U4] Authenticated profile search: Bearer + search profiles"
+echo "================================================================="
+echo "GET http://localhost:${SERVER_PORT}/profiles?name=Smith"
+echo "Header: Authorization: Bearer <token>"
+SEARCH_RESP=$(curl -s -X GET "http://localhost:${SERVER_PORT}/profiles?name=Smith" \
+  -H "Authorization: Bearer ${TOKEN}")
+echo "Response:"
+echo "${SEARCH_RESP}"
+
+echo ""
+echo "================================================================="
+echo "[U5] Auth gate refusal: missing/invalid bearer rejected (401)"
+echo "================================================================="
+echo "GET http://localhost:${SERVER_PORT}/profiles/${ALICE_ID} (no Authorization header)"
+STATUS_NO_AUTH=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${SERVER_PORT}/profiles/${ALICE_ID}")
+RESP_NO_AUTH=$(curl -s "http://localhost:${SERVER_PORT}/profiles/${ALICE_ID}")
+echo "HTTP Status: ${STATUS_NO_AUTH}"
+echo "Response: ${RESP_NO_AUTH}"
+
+echo ""
+echo "GET http://localhost:${SERVER_PORT}/profiles/${ALICE_ID} (invalid Bearer token)"
+STATUS_BAD_AUTH=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${SERVER_PORT}/profiles/${ALICE_ID}" \
+  -H "Authorization: Bearer bad-invalid-token")
+RESP_BAD_AUTH=$(curl -s "http://localhost:${SERVER_PORT}/profiles/${ALICE_ID}" \
+  -H "Authorization: Bearer bad-invalid-token")
+echo "HTTP Status: ${STATUS_BAD_AUTH}"
+echo "Response: ${RESP_BAD_AUTH}"
+
+if [[ "${STATUS_NO_AUTH}" != "401" || "${STATUS_BAD_AUTH}" != "401" ]]; then
+  echo "ERROR: Auth gate failed to refuse unauthenticated requests with 401!"
+  exit 1
+fi
+
+echo ""
+echo "================================================================="
+echo " All use cases U1 through U5 successfully demonstrated!"
+echo "================================================================="

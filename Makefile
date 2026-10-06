@@ -1,0 +1,26 @@
+.PHONY: all build test demo clean generate ir-instrument
+
+all: build
+
+generate:
+	sqlc generate
+	oapi-codegen --config=internal/api/cfg.yaml project/openapi.yaml
+
+build:
+	mkdir -p bin
+	go build -o bin/server ./cmd/server
+
+test:
+	go test -v ./...
+
+demo: build
+	./scripts/demo.sh
+
+IR_INSTRUMENT ?= $(shell test -x /Users/svanegmond/src/helm/nonlinear/.venv/bin/ir-instrument && echo /Users/svanegmond/src/helm/nonlinear/.venv/bin/ir-instrument || which ir-instrument)
+REF ?= ENG-561
+
+ir-instrument:
+	REF=$(REF) $(IR_INSTRUMENT) --ref $(REF)
+
+clean:
+	rm -rf bin demo_identity.db
