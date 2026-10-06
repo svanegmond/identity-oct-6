@@ -47,7 +47,7 @@ After this phase, a Go service implements the accepted contracts: DAO adapters f
 
 ### Phase C — Prove
 
-After this phase, `go test ./...` is green with named tests covering DAO (both backends or interface + one backend + dialect seams), auth gate, connector mapping, and the composed IdP path. Proof Parade exhibits live request/response (or terminal) evidence for the VCs below.
+After this phase, `go test ./...` is green with named tests covering DAO on **both** PostgreSQL and SQLite backends (TP-2 + TP-3; no one-backend dialect-seam escape), auth gate, connector mapping, authenticated HTTP search/retrieve (TP-8), and the composed IdP path (behavioral TP-6). Proof Parade exhibits live request/response (or terminal) evidence for the VCs below.
 
 ## Seams
 
@@ -98,7 +98,7 @@ After this phase, `go test ./...` is green with named tests covering DAO (both b
 
 - **Proof Parade path:** `project/demos/ENG-561-identity-go-service.md`
 - [ ] **VC-1** Stand the HTTP server (SQLite or Postgres). Bootstrap a credential via **DAO seed/fixture** (or a REST register route **only if** Phase A contracts one — not required otherwise), obtain JWT via login, call authenticated profile search/retrieve with `Authorization: Bearer <token>`; capture request/response. Exhibit: Auth+profile round-trip.
-- [ ] **VC-2** Drive the composed IdP path (authenticated REST enrich/lookup and/or thin `cmd`) against a fake/stub IdP implementing `/auth` + `/identity`; show PII returned/refreshed without DAO importing IdP packages. Capture request/response or terminal session. Exhibit: Composed IdP path. (Isolated connector httptest alone does not satisfy this VC.)
+- [ ] **VC-2** Drive the composed IdP path (authenticated REST enrich/lookup and/or thin `cmd`) against a fake/stub IdP implementing `/auth` + `/identity`; show PII **returned to the caller** without DAO importing IdP packages. Persist-after-connector is latitude, not this VC. Capture request/response or terminal session. Exhibit: Composed IdP path. (Isolated connector httptest alone does not satisfy this VC.)
 - [ ] **VC-3** Show unauthenticated (or invalid-token) call to a protected profile route is rejected; capture status/body. Exhibit: Auth gate refusal.
 
 ## Test Plan
